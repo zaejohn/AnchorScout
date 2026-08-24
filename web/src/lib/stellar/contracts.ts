@@ -133,8 +133,16 @@ export async function getWalletRoutes(address: string): Promise<RouteRecord[]> {
     ...baseClientOptions(),
     contractId: ROUTE_REGISTRY_CONTRACT_ID,
   });
-  const transaction = await client.get_user_routes({ user: address, cursor: 0, limit: 20 });
+  const countTransaction = await client.get_user_route_count({ user: address });
+  const { cursor, limit } = recentRouteWindow(countTransaction.result);
+  if (limit === 0) return [];
+  const transaction = await client.get_user_routes({ user: address, cursor, limit });
   return transaction.result;
+}
+
+export function recentRouteWindow(count: number, pageSize = 20) {
+  const limit = Math.min(Math.max(count, 0), pageSize);
+  return { cursor: Math.max(0, count - limit), limit };
 }
 
 export async function getRouteReceipt(
