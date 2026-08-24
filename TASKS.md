@@ -14,15 +14,15 @@
 - [x] Add wallet-signed route recording and settlement, contract-event polling/deduplication, and durable wallet-scoped history
 - [x] Add Vercel Web Analytics and non-sensitive product events
 - [x] Add repeatable PowerShell/Bash Testnet deployment scripts and GitHub Actions release gates
-- [x] Pass web lint, typecheck, 11 tests, production build, 16 contract tests, and optimized contract builds
+- [x] Pass web lint, typecheck, 69 tests across 11 files, production build, 16 contract tests, and optimized contract builds
 - [x] Complete specialist contract review and Testnet release re-review
 - [x] Deploy both contracts and complete a real route → 0.1 XLM → receipt/finalization flow on Testnet
 - [x] Verify the desktop and 390 px mobile route flow in-browser with no horizontal overflow
-- [x] Record public network evidence and maintain 16 meaningful implementation commits before final documentation
+- [x] Record public network evidence and maintain 20 meaningful implementation commits before final documentation
 
 ## Human-controlled completion gates
 
 - [ ] Connect a real browser wallet extension and capture connected-wallet, balance, rejection, and wallet-signed success screenshots. The available in-app browser has no installed Stellar wallet.
 - [ ] Authenticate Vercel and deploy the production application. `vercel whoami` reports logged out; the CLI's anonymous temporary flow also failed before upload.
-- [ ] Push the repository to a Git host and observe the included GitHub Actions workflow. No Git remote is configured, so the same workflow gates were reproduced locally instead.
+- [ ] Push the configured GitHub remote and observe the included GitHub Actions workflow. The same workflow gates have passed locally; GitHub CLI authentication is unavailable on this workstation.
 - [ ] Run local RPC integration through Stellar Quickstart if Docker is installed. Contract unit and cross-contract tests already cover the local state transitions.

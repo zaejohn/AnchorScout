@@ -48,8 +48,8 @@ Browser wallet + responsive client
 ```
 
 - `web/src/lib/anchors/`: request schema, provider interface, adapters, normalization, ranking, and tests
-- `web/src/lib/stellar/`: Testnet config, Wallets Kit, classic payment lifecycle, generated-contract wrappers, and history synchronization
-- `web/src/app/api/`: quote, account, event, and history boundaries
+- `web/src/lib/stellar/`: Testnet config, Wallets Kit, retry-safe classic/contract lifecycles, generated-contract wrappers, and history synchronization
+- `web/src/app/api/`: quote, account, event, transaction-status, and history boundaries
 - `contracts/route-registry/`: wallet-owned route records and final-state transitions
 - `contracts/settlement-receipt/`: globally unique receipts and authenticated cross-contract finalization
 - `web/src/lib/stellar/generated/`: generated TypeScript bindings from deployed contract specs
@@ -105,7 +105,7 @@ Verified release result:
 
 - ESLint: passed
 - TypeScript: passed
-- Frontend/domain tests: 11 passed
+- Frontend/domain tests: 69 passed across 11 files
 - Next.js 16.3.2 production build: passed
 - Soroban tests: 16 passed
 - Optimized contract builds: passed
@@ -147,7 +147,8 @@ The final public reads return a `Completed` route and `Completed` receipt linked
 
 - The browser is untrusted; route input is validated again at the server boundary.
 - Wallet signatures remain user-controlled.
-- Submission and confirmation are separate states.
+- Submission and confirmation are separate states; broadcast hashes are checkpointed before confirmation and reconciled after reload without automatic resubmission.
+- Configured SEP-38 HTTPS origins are resolved, public-address validated, DNS-pinned per request, response-bounded, and forbidden from redirecting.
 - Contract settlement authority is configured exactly once.
 - Receipt IDs are globally unique, and a failed nested Registry invocation rolls back Receipt storage atomically.
 - No bank, KYC, seed, private key, or sensitive payout data is stored or emitted.
