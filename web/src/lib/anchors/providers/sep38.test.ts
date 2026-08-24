@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { assertSafeQuoteServer } from "./sep38";
+import { assertSafeQuoteServer, isPublicAddress } from "./sep38";
 
 describe("SEP-38 server policy", () => {
   it("accepts the configured home origin and explicit HTTPS origins", () => {
@@ -37,5 +37,24 @@ describe("SEP-38 server policy", () => {
         "https://attacker.example/sep38",
       ),
     ).toThrow(/explicitly allowed/);
+  });
+
+  it.each([
+    "127.0.0.1",
+    "10.1.2.3",
+    "100.64.0.1",
+    "169.254.169.254",
+    "192.0.2.1",
+    "198.51.100.2",
+    "203.0.113.3",
+    "::1",
+    "fc00::1",
+    "fe80::1",
+  ])("classifies non-public resolved address %s", (address) => {
+    expect(isPublicAddress(address)).toBe(false);
+  });
+
+  it("allows a public resolved address", () => {
+    expect(isPublicAddress("8.8.8.8")).toBe(true);
   });
 });

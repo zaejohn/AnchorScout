@@ -3,7 +3,9 @@ import type {
   RawProviderQuote,
   RouteRequest,
 } from "../types";
-import { isIP } from "node:net";
+import { lookup } from "node:dns/promises";
+import { request as httpsRequest } from "node:https";
+import { BlockList, isIP } from "node:net";
 
 const TOML_QUOTE_SERVER = /^ANCHOR_QUOTE_SERVER\s*=\s*["']([^"']+)["']/m;
 
@@ -13,7 +15,88 @@ type Sep38PriceResponse = {
   fee: { total: string };
 };
 
-const PRIVATE_IPV4 = /^(?:10\.|127\.|169\.254\.|192\.168\.|172\.(?:1[6-9]|2\d|3[01])\.)/;
+const blockedAddresses = new BlockList();
+for (const [network, prefix] of [
+  ["0.0.0.0", 8], ["10.0.0.0", 8], ["100.64.0.0", 10],
+  ["127.0.0.0", 8], ["169.254.0.0", 16], ["172.16.0.0", 12],
+  ["192.0.0.0", 24], ["192.0.2.0", 24], ["192.168.0.0", 16],
+  ["198.18.0.0", 15], ["198.51.100.0", 24], ["203.0.113.0", 24],
+  ["224.0.0.0", 4], ["240.0.0.0", 4],
+] as const) {
+  blockedAddresses.addSubnet(network, prefix, "ipv4");
+}
+for (const [network, prefix] of [
+  ["::", 128], ["::1", 128], ["fc00::", 7],
+  ["fe80::", 10], ["ff00::", 8], ["2001:db8::", 32],
+] as const) {
+  blockedAddresses.addSubnet(network, prefix, "ipv6");
+}
+
+export function isPublicAddress(address: string) {
+  const version = isIP(address);
+  if (version === 4) return !blockedAddresses.check(address, "ipv4");
+  if (version === 6) {
+    if (address.toLowerCase().startsWith("::ffff:")) return false;
+    return !blockedAddresses.check(address, "ipv6");
+  }
+  return false;
+}
+
+async function resolvePublicAddress(hostname: string) {
+  if (isIP(hostname)) {
+    if (!isPublicAddress(hostname)) throw new Error("Provider resolved to a private host");
+    return { address: hostname, family: isIP(hostname) as 4 | 6 };
+  }
+  const addresses = await lookup(hostname, { all: true, verbatim: true });
+  if (addresses.length === 0 || addresses.some(({ address }) => !isPublicAddress(address))) {
+    throw new Error("Provider resolved to a private host");
+  }
+  return addresses[0];
+}
+
+async function pinnedHttpsGet(url: URL, signal: AbortSignal) {
+  const pinned = await resolvePublicAddress(url.hostname);
+  return new Promise<{ status: number; body: string }>((resolve, reject) => {
+    const request = httpsRequest(
+      {
+        protocol: "https:",
+        hostname: url.hostname,
+        servername: url.hostname,
+        port: url.port || 443,
+        method: "GET",
+        path: `${url.pathname}${url.search}`,
+        headers: { accept: "application/json, text/plain;q=0.9" },
+        lookup: (_hostname, _options, callback) =>
+          callback(null, pinned.address, pinned.family),
+      },
+      (response) => {
+        const status = response.statusCode ?? 500;
+        if (status >= 300 && status < 400) {
+          response.resume();
+          reject(new Error("Provider redirects are not allowed"));
+          return;
+        }
+        const chunks: Buffer[] = [];
+        let size = 0;
+        response.on("data", (chunk: Buffer) => {
+          size += chunk.length;
+          if (size > 512 * 1024) {
+            request.destroy(new Error("Provider response is too large"));
+            return;
+          }
+          chunks.push(chunk);
+        });
+        response.on("end", () =>
+          resolve({ status, body: Buffer.concat(chunks).toString("utf8") }),
+        );
+      },
+    );
+    request.once("error", reject);
+    if (signal.aborted) request.destroy(signal.reason);
+    else signal.addEventListener("abort", () => request.destroy(signal.reason), { once: true });
+    request.end();
+  });
+}
 
 export function assertSafeQuoteServer(
   homeDomain: string,
@@ -26,11 +109,9 @@ export function assertSafeQuoteServer(
     throw new Error("SEP-38 server must use authenticated HTTPS");
   }
   const hostname = candidate.hostname.replace(/^\[|\]$/g, "").toLowerCase();
-  const ipVersion = isIP(hostname);
   if (
     hostname === "localhost" ||
-    (ipVersion === 4 && PRIVATE_IPV4.test(hostname)) ||
-    (ipVersion === 6 && (hostname === "::1" || hostname.startsWith("fc") || hostname.startsWith("fd") || hostname.startsWith("fe80")))
+    (isIP(hostname) > 0 && !isPublicAddress(hostname))
   ) {
     throw new Error("SEP-38 server cannot target a private host");
   }
@@ -58,13 +139,11 @@ export class Sep38IndicativeProvider implements AnchorProvider {
   ): Promise<RawProviderQuote> {
     const tomlUrl = new URL("/.well-known/stellar.toml", this.homeDomain);
     if (tomlUrl.protocol !== "https:") throw new Error("SEP-1 requires HTTPS");
-    const tomlResponse = await fetch(tomlUrl, {
-      signal,
-      cache: "force-cache",
-      next: { revalidate: 3_600 },
-    });
-    if (!tomlResponse.ok) throw new Error("SEP-1 metadata unavailable");
-    const quoteServer = (await tomlResponse.text()).match(TOML_QUOTE_SERVER)?.[1];
+    const tomlResponse = await pinnedHttpsGet(tomlUrl, signal);
+    if (tomlResponse.status < 200 || tomlResponse.status >= 300) {
+      throw new Error("SEP-1 metadata unavailable");
+    }
+    const quoteServer = tomlResponse.body.match(TOML_QUOTE_SERVER)?.[1];
     if (!quoteServer) throw new Error("Anchor does not advertise SEP-38");
 
     const safeQuoteServer = assertSafeQuoteServer(this.homeDomain, quoteServer);
@@ -81,9 +160,11 @@ export class Sep38IndicativeProvider implements AnchorProvider {
     endpoint.searchParams.set("buy_asset", "iso4217:PHP");
     endpoint.searchParams.set("sell_amount", request.amount);
     endpoint.searchParams.set("context", "sep31");
-    const response = await fetch(endpoint, { signal, cache: "no-store" });
-    if (!response.ok) throw new Error(`SEP-38 price failed (${response.status})`);
-    const price = (await response.json()) as Sep38PriceResponse;
+    const response = await pinnedHttpsGet(endpoint, signal);
+    if (response.status < 200 || response.status >= 300) {
+      throw new Error(`SEP-38 price failed (${response.status})`);
+    }
+    const price = JSON.parse(response.body) as Sep38PriceResponse;
     const sourceAmount = Number(request.amount);
     const totalPrice = Number(price.total_price || price.price);
     const fee = Number(price.fee?.total ?? 0);
