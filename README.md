@@ -139,6 +139,7 @@ The final public reads return a `Completed` route and `Completed` receipt linked
 - Mainnet is disabled and was not touched.
 - Native XLM is the executable Testnet asset. Test USDC is indicative until an issuer is configured.
 - Vercel Web Analytics is included in the root layout, with non-sensitive quote/route lifecycle events.
+- `/api/health` probes Horizon, RPC, protocol/ledger visibility, and public contract configuration for deployment monitoring.
 - Production Vercel deployment is ready but requires `vercel login` or a deployment token; this workstation is logged out.
 - The in-app browser verified wallet discovery, route comparison, expiration countdowns, mobile responsiveness, and no horizontal overflow. Signing with a real extension wallet remains a human-controlled browser action.
 
