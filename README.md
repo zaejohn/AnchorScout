@@ -1,5 +1,7 @@
 # AnchorScout
 
+[![AnchorScout CI](https://github.com/zaejohn/AnchorScout/actions/workflows/ci.yml/badge.svg)](https://github.com/zaejohn/AnchorScout/actions/workflows/ci.yml)
+
 AnchorScout is a non-custodial Stellar Testnet route-comparison dApp. It lets a user compare normalized Anchor-style quotes, select a live route, sign a real XLM payment, record the selection on Soroban, and finalize it through a second contract with public receipt evidence.
 
 The product solves a simple problem: payment routes expose different rates, fees, speed, and availability, but those differences are hard to compare consistently. AnchorScout isolates each provider behind one adapter interface, validates and normalizes responses server-side, and ranks only complete, live quotes.
@@ -112,7 +114,7 @@ Verified release result:
 - Contract specialist re-review: no release-blocking findings
 - Desktop and 390 px mobile browser checks: passed
 
-The same gates are encoded in `.github/workflows/ci.yml`. A remote GitHub run requires configuring and pushing a Git remote.
+The same gates are encoded in `.github/workflows/ci.yml`. [GitHub Actions run #4](https://github.com/zaejohn/AnchorScout/actions/runs/32699582208) passed both the web and contract jobs on the pushed implementation.
 
 ### Deploy contracts to Testnet
 

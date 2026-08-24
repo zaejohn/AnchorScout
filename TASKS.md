@@ -24,5 +24,5 @@
 
 - [ ] Connect a real browser wallet extension and capture connected-wallet, balance, rejection, and wallet-signed success screenshots. The available in-app browser has no installed Stellar wallet.
 - [ ] Authenticate Vercel and deploy the production application. `vercel whoami` reports logged out; the CLI's anonymous temporary flow also failed before upload.
-- [ ] Push the configured GitHub remote and observe the included GitHub Actions workflow. The same workflow gates have passed locally; GitHub CLI authentication is unavailable on this workstation.
+- [x] Push `main` to the configured GitHub remote and verify both jobs in [AnchorScout CI run #4](https://github.com/zaejohn/AnchorScout/actions/runs/32699582208)
 - [ ] Run local RPC integration through Stellar Quickstart if Docker is installed. Contract unit and cross-contract tests already cover the local state transitions.
