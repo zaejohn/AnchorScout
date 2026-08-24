@@ -1,4 +1,4 @@
-import { Networks } from "@stellar/stellar-sdk";
+import { Networks, StrKey } from "@stellar/stellar-sdk";
 
 export const STELLAR_NETWORK = "TESTNET" as const;
 export const STELLAR_NETWORK_PASSPHRASE = Networks.TESTNET;
@@ -23,6 +23,19 @@ export const stellarExpertUrl = (kind: "account" | "tx" | "contract", value: str
 };
 
 export function hasContractDeployment() {
-  return Boolean(ROUTE_REGISTRY_CONTRACT_ID && SETTLEMENT_RECEIPT_CONTRACT_ID);
+  return hasValidContractDeployment(
+    ROUTE_REGISTRY_CONTRACT_ID,
+    SETTLEMENT_RECEIPT_CONTRACT_ID,
+  );
 }
 
+export function hasValidContractDeployment(routeId: string, settlementId: string) {
+  return StrKey.isValidContract(routeId) && StrKey.isValidContract(settlementId);
+}
+
+export function hasExecutableDeployment() {
+  return (
+    hasContractDeployment() &&
+    StrKey.isValidEd25519PublicKey(DEMO_PAYMENT_DESTINATION)
+  );
+}
