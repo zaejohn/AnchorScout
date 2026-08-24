@@ -21,6 +21,20 @@ import { decimalToUnits } from "./units";
 
 const AMOUNT_PATTERN = /^\d+(?:\.\d{1,7})?$/;
 
+type HorizonTransaction = { hash: string; ledger: number; successful: boolean };
+
+export type XlmTransactionLookup =
+  | { status: "not_found" }
+  | { status: "successful"; transaction: HorizonTransaction }
+  | { status: "failed"; transaction: HorizonTransaction };
+
+export class TerminalPaymentFailedError extends Error {
+  constructor(readonly hash: string) {
+    super(`Payment transaction ${hash} failed on-chain`);
+    this.name = "TerminalPaymentFailedError";
+  }
+}
+
 export function validateXlmTransferInput(destination: string, amount: string) {
   if (!StrKey.isValidEd25519PublicKey(destination)) {
     throw new Error("Invalid Stellar destination address");
@@ -38,10 +52,12 @@ export async function findConfirmedXlmTransaction(hash: string) {
     cache: "no-store",
     signal: AbortSignal.timeout(5_000),
   });
-  if (response.status === 404) return null;
+  if (response.status === 404) return { status: "not_found" } as const;
   if (!response.ok) throw new Error(`Horizon returned ${response.status}`);
-  const transaction = (await response.json()) as { hash: string; ledger: number; successful: boolean };
-  return transaction.successful ? transaction : null;
+  const transaction = (await response.json()) as HorizonTransaction;
+  return transaction.successful
+    ? ({ status: "successful", transaction } as const)
+    : ({ status: "failed", transaction } as const);
 }
 
 export async function sendXlm(params: {
@@ -88,12 +104,30 @@ export async function sendXlm(params: {
     let result: { hash: string; ledger: number };
     try {
       result = await server.submitTransaction(signed);
-    } catch {
-      const confirmed = await findConfirmedXlmTransaction(paymentHash).catch(() => null);
-      if (!confirmed) {
+    } catch (submissionError) {
+      const responseStatus = (
+        submissionError as { response?: { status?: number } }
+      ).response?.status;
+      const definitiveRejection =
+        typeof responseStatus === "number" &&
+        responseStatus >= 400 &&
+        responseStatus < 500 &&
+        ![408, 429].includes(responseStatus);
+      const lookup = await findConfirmedXlmTransaction(paymentHash).catch(() =>
+        definitiveRejection
+          ? ({ status: "failed", transaction: { hash: paymentHash, ledger: 0, successful: false } } as const)
+          : ({ status: "not_found" } as const),
+      );
+      if (lookup.status === "not_found") {
+        if (definitiveRejection) {
+          throw new TerminalPaymentFailedError(paymentHash);
+        }
         throw new SubmittedTransactionPendingError("payment", paymentHash);
       }
-      result = confirmed;
+      if (lookup.status === "failed") {
+        throw new TerminalPaymentFailedError(paymentHash);
+      }
+      result = lookup.transaction;
     }
     onUpdate({
       phase: "submitted",

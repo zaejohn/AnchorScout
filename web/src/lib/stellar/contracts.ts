@@ -16,7 +16,10 @@ import { decimalToUnits } from "./units";
 import { walletSigner } from "./wallet";
 import type { AnchorQuote } from "../anchors/types";
 
-const randomId = () => Buffer.from(crypto.getRandomValues(new Uint8Array(32)));
+export const createRouteId = () =>
+  Buffer.from(crypto.getRandomValues(new Uint8Array(32)));
+
+const randomId = createRouteId;
 
 async function sha256(value: string) {
   const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value));
@@ -37,10 +40,11 @@ function baseClientOptions(address?: string) {
 export async function createRoute(params: {
   address: string;
   quote: AnchorQuote;
+  routeId?: Buffer;
   onUpdate: (update: TransactionUpdate) => void;
 }) {
   const { address, quote, onUpdate } = params;
-  const routeId = randomId();
+  const routeId = params.routeId ?? randomId();
   const quoteHash = await sha256(
     JSON.stringify({
       anchorId: quote.anchorId,
@@ -71,22 +75,27 @@ export async function createRoute(params: {
   });
   onUpdate({ phase: "awaiting_signature", message: "Authorize route selection in your wallet." });
   let submittedHash: string | undefined;
+  let lastStatus: string | undefined;
+  let sent: Awaited<ReturnType<typeof transaction.signAndSend>>;
   try {
-    await transaction.signAndSend({
+    sent = await transaction.signAndSend({
       watcher: {
         onSubmitted(response) {
           submittedHash = response?.hash;
           onUpdate({ phase: "submitted", message: "Route transaction submitted…", hash: submittedHash });
         },
         onProgress(response) {
+          lastStatus = response?.status;
           if (response?.status === "NOT_FOUND") {
             onUpdate({ phase: "pending", message: "Waiting for route confirmation…", hash: submittedHash });
+          } else if (response?.status === "FAILED") {
+            onUpdate({ phase: "failed", message: "Route transaction failed on-chain.", hash: submittedHash });
           }
         },
       },
     });
   } catch (error) {
-    if (submittedHash) {
+    if (submittedHash && lastStatus !== "FAILED" && lastStatus !== "SUCCESS") {
       throw new SubmittedTransactionPendingError(
         "route",
         submittedHash,
@@ -95,6 +104,10 @@ export async function createRoute(params: {
     }
     throw error;
   }
+  if (sent.getTransactionResponse?.status !== "SUCCESS") {
+    throw new Error("Route transaction failed on-chain");
+  }
+  void sent.result;
   onUpdate({ phase: "confirmed", message: "Route selection recorded on-chain.", hash: submittedHash });
   return { routeId, hash: submittedHash };
 }
@@ -122,22 +135,27 @@ export async function recordSettlement(params: {
   });
   onUpdate({ phase: "awaiting_signature", message: "Authorize the settlement receipt." });
   let submittedHash: string | undefined;
+  let lastStatus: string | undefined;
+  let sent: Awaited<ReturnType<typeof transaction.signAndSend>>;
   try {
-    await transaction.signAndSend({
+    sent = await transaction.signAndSend({
       watcher: {
         onSubmitted(response) {
           submittedHash = response?.hash;
           onUpdate({ phase: "submitted", message: "Receipt transaction submitted…", hash: submittedHash });
         },
         onProgress(response) {
+          lastStatus = response?.status;
           if (response?.status === "NOT_FOUND") {
             onUpdate({ phase: "pending", message: "Waiting for settlement confirmation…", hash: submittedHash });
+          } else if (response?.status === "FAILED") {
+            onUpdate({ phase: "failed", message: "Settlement transaction failed on-chain.", hash: submittedHash });
           }
         },
       },
     });
   } catch (error) {
-    if (submittedHash) {
+    if (submittedHash && lastStatus !== "FAILED" && lastStatus !== "SUCCESS") {
       throw new SubmittedTransactionPendingError(
         "receipt",
         submittedHash,
@@ -146,6 +164,10 @@ export async function recordSettlement(params: {
     }
     throw error;
   }
+  if (sent.getTransactionResponse?.status !== "SUCCESS") {
+    throw new Error("Settlement transaction failed on-chain");
+  }
+  void sent.result;
   onUpdate({ phase: "confirmed", message: "Settlement finalized across both contracts.", hash: submittedHash });
   return { hash: submittedHash };
 }
@@ -174,10 +196,6 @@ export async function getRouteReceipt(
     ...baseClientOptions(),
     contractId: SETTLEMENT_RECEIPT_CONTRACT_ID,
   });
-  try {
-    const transaction = await client.get_receipt({ route_id: routeId });
-    return transaction.result;
-  } catch {
-    return null;
-  }
+  const transaction = await client.get_receipt({ route_id: routeId });
+  return transaction.result;
 }

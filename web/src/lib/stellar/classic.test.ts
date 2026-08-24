@@ -29,9 +29,11 @@ describe("XLM transfer preflight", () => {
 });
 
 describe("ambiguous XLM submission reconciliation", () => {
-  it("returns null while Horizon has no record and never invents confirmation", async () => {
+  it("distinguishes a missing Horizon record from confirmation", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(null, { status: 404 })));
-    await expect(findConfirmedXlmTransaction("a".repeat(64))).resolves.toBeNull();
+    await expect(findConfirmedXlmTransaction("a".repeat(64))).resolves.toEqual({
+      status: "not_found",
+    });
   });
 
   it("returns only a successful Horizon transaction", async () => {
@@ -42,8 +44,21 @@ describe("ambiguous XLM submission reconciliation", () => {
       ),
     );
     await expect(findConfirmedXlmTransaction("b".repeat(64))).resolves.toMatchObject({
-      hash: "b".repeat(64),
-      ledger: 123,
+      status: "successful",
+      transaction: { hash: "b".repeat(64), ledger: 123 },
+    });
+  });
+
+  it("preserves terminal payment failure for safe route finalization", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        Response.json({ hash: "c".repeat(64), ledger: 124, successful: false }),
+      ),
+    );
+    await expect(findConfirmedXlmTransaction("c".repeat(64))).resolves.toMatchObject({
+      status: "failed",
+      transaction: { hash: "c".repeat(64), ledger: 124 },
     });
   });
 });

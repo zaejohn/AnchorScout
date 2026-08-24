@@ -8,7 +8,7 @@ describe("contract event paging", () => {
   it("starts from a bounded recent ledger on the first poll", () => {
     expect(buildEventRequest({ latestLedger: 500, contractIds })).toEqual({
       filters: [{ type: "contract", contractIds }],
-      limit: 100,
+      pagination: { limit: 100 },
       startLedger: 400,
     });
   });
@@ -23,8 +23,7 @@ describe("contract event paging", () => {
       }),
     ).toEqual({
       filters: [{ type: "contract", contractIds }],
-      limit: 100,
-      cursor: "00123-00004",
+      pagination: { limit: 100, cursor: "00123-00004" },
     });
   });
 

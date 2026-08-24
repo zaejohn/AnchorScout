@@ -3,6 +3,7 @@ import { StrKey } from "@stellar/stellar-sdk";
 import { noStoreJson } from "@/lib/server/responses";
 import { hasContractDeployment } from "@/lib/stellar/config";
 import { getRouteReceipt, getWalletRoutes } from "@/lib/stellar/contracts";
+import { getRouteTransactionEvidence } from "@/lib/stellar/event-evidence";
 import { unitsToDecimal } from "@/lib/stellar/units";
 
 const statusTag = (status: { tag: string }) => status.tag.toUpperCase();
@@ -20,14 +21,25 @@ export async function GET(
   }
   try {
     const records = await getWalletRoutes(address);
+    const routeIds = records.map((route) =>
+      Buffer.from(route.route_id).toString("hex"),
+    );
+    const transactionEvidence = await getRouteTransactionEvidence(routeIds).catch(
+      () => new Map(),
+    );
     const routes = await Promise.all(
       [...records].reverse().map(async (route) => {
         const receipt =
           route.status.tag === "Pending"
             ? null
             : await getRouteReceipt(Buffer.from(route.route_id));
+        const routeId = Buffer.from(route.route_id).toString("hex");
+        const evidence = transactionEvidence.get(routeId);
+        const paymentHash = route.transaction_hash
+          ? Buffer.from(route.transaction_hash).toString("hex")
+          : null;
         return {
-          routeId: Buffer.from(route.route_id).toString("hex"),
+          routeId,
           anchorId: route.anchor_id,
           sourceAsset: route.source_asset,
           sourceAmount: unitsToDecimal(route.source_amount, 7),
@@ -36,12 +48,12 @@ export async function GET(
           fee: unitsToDecimal(route.fee, 7),
           selectedAt: Number(route.selected_at),
           status: statusTag(route.status),
-          paymentHash: route.transaction_hash
-            ? Buffer.from(route.transaction_hash).toString("hex")
-            : null,
+          paymentHash: paymentHash === "0".repeat(64) ? null : paymentHash,
           receiptId: receipt
             ? Buffer.from(receipt.receipt_id).toString("hex")
             : null,
+          routeTransactionHash: evidence?.routeTransactionHash ?? null,
+          receiptTransactionHash: evidence?.receiptTransactionHash ?? null,
         };
       }),
     );

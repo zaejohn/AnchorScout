@@ -6,11 +6,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { isSelectableQuote } from "@/lib/anchors/ranking";
 import type { AnchorQuote, ProviderResult, QuoteSearchResult, RouteRequest } from "@/lib/anchors/types";
-import { findConfirmedXlmTransaction, sendXlm } from "@/lib/stellar/classic";
+import { findConfirmedXlmTransaction, sendXlm, TerminalPaymentFailedError } from "@/lib/stellar/classic";
 import { DEMO_PAYMENT_DESTINATION, stellarExpertUrl } from "@/lib/stellar/config";
-import { createRoute, recordSettlement } from "@/lib/stellar/contracts";
+import { createRoute, createRouteId, recordSettlement } from "@/lib/stellar/contracts";
 import { classifyWalletError, SubmittedTransactionPendingError, type TransactionUpdate } from "@/lib/stellar/errors";
-import { parseProofCheckpoint, resumableProofLabel, type ProofCheckpoint } from "@/lib/stellar/proof";
+import { applyBroadcastUpdate, parseProofCheckpoint, resumableProofLabel, type ProofCheckpoint } from "@/lib/stellar/proof";
 import { connectWallet, disconnectWallet, restoreWallet, walletSigner } from "@/lib/stellar/wallet";
 
 type WalletSession = { address: string; walletId: string };
@@ -19,6 +19,7 @@ type HistoryRoute = {
   routeId: string; anchorId: string; sourceAsset: string; sourceAmount: string;
   destinationCurrency: string; destinationAmount: string; fee: string;
   selectedAt: number; status: string; paymentHash: string | null; receiptId: string | null;
+  routeTransactionHash: string | null; receiptTransactionHash: string | null;
 };
 
 const initialTransfer: TransactionUpdate = { phase: "idle", message: "Ready for a Testnet XLM transfer." };
@@ -51,6 +52,8 @@ export function AnchorScoutApp({ contractsConfigured }: { contractsConfigured: b
   const [clock, setClock] = useState(0);
   const eventCursor = useRef<string | null>(null);
   const seenEvents = useRef(new Set<string>());
+  const eventPollInitialized = useRef(false);
+  const executionLock = useRef(false);
   const nativeBalance = balances.find((balance) => balance.asset === "XLM")?.balance;
 
   const persistCheckpoint = useCallback((value: ProofCheckpoint | null) => {
@@ -161,6 +164,68 @@ export function AnchorScoutApp({ contractsConfigured }: { contractsConfigured: b
   }, [checkpoint, history, persistCheckpoint]);
 
   useEffect(() => {
+    if (!checkpoint || !wallet) return;
+    let active = true;
+    const reconcileContractSubmission = async () => {
+      const savedRoute = history.find(
+        (route) => route.routeId === checkpoint.routeId,
+      );
+      const stage = !savedRoute
+        ? "route"
+        : checkpoint.receiptPending
+          ? "receipt"
+          : null;
+      const hash =
+        stage === "route"
+          ? checkpoint.routeTransactionHash
+          : stage === "receipt"
+            ? checkpoint.receiptTransactionHash
+            : undefined;
+      if (!stage || !hash) return;
+      try {
+        const response = await fetch(`/api/stellar/transaction/${hash}`, {
+          cache: "no-store",
+        });
+        if (!response.ok || !active) return;
+        const payload = (await response.json()) as {
+          status: "NOT_FOUND" | "SUCCESS" | "FAILED";
+        };
+        if (payload.status === "SUCCESS") {
+          await refreshHistory(wallet.address);
+        } else if (payload.status === "FAILED" && stage === "route") {
+          persistCheckpoint(null);
+          setExecution({
+            phase: "failed",
+            message:
+              "The saved route transaction failed on-chain. You can safely start a new proof.",
+            hash,
+          });
+        } else if (payload.status === "FAILED") {
+          persistCheckpoint({
+            ...checkpoint,
+            receiptPending: false,
+            receiptTransactionHash: undefined,
+          });
+          setExecution({
+            phase: "idle",
+            message:
+              "The prior receipt transaction failed on-chain. Resume to retry only the receipt.",
+            hash,
+          });
+        }
+      } catch {
+        // The checkpoint remains authoritative during a transient lookup error.
+      }
+    };
+    void reconcileContractSubmission();
+    const timer = window.setInterval(reconcileContractSubmission, 8_000);
+    return () => {
+      active = false;
+      window.clearInterval(timer);
+    };
+  }, [checkpoint, history, persistCheckpoint, refreshHistory, wallet]);
+
+  useEffect(() => {
     const tick = () => setClock(Date.now());
     const initial = window.setTimeout(tick, 0);
     const timer = window.setInterval(tick, 1_000);
@@ -183,7 +248,9 @@ export function AnchorScoutApp({ contractsConfigured }: { contractsConfigured: b
           seenEvents.current.add(event.id); return true;
         });
         eventCursor.current = payload.cursor;
-        if (newEvent && seenEvents.current.size > payload.events.length) await refreshHistory(wallet.address);
+        const shouldRefresh = eventPollInitialized.current && newEvent;
+        eventPollInitialized.current = true;
+        if (shouldRefresh) await refreshHistory(wallet.address);
       } catch { /* Manual refresh remains available during transient RPC failures. */ }
     };
     void poll(); const timer = window.setInterval(poll, 8_000);
@@ -230,45 +297,101 @@ export function AnchorScoutApp({ contractsConfigured }: { contractsConfigured: b
   };
 
   const handleExecute = async () => {
+    if (executionLock.current) return;
     if (!wallet || (!selected && !checkpoint)) return;
     if (!checkpoint && selected && !isSelectableQuote(selected, new Date())) return setExecution({ phase: "expired", message: "This quote expired. Refresh routes before signing." });
     if (!contractsConfigured || !DEMO_PAYMENT_DESTINATION) return setExecution({ phase: "failed", message: "The public Testnet deployment is not configured in this build." });
+    executionLock.current = true;
     try {
       let progress = checkpoint?.walletAddress === wallet.address ? checkpoint : null;
+      const updateProgress = (
+        stage: "route" | "payment" | "receipt",
+        update: TransactionUpdate,
+        messagePrefix = "",
+      ) => {
+        setExecution({
+          ...update,
+          message: messagePrefix ? `${messagePrefix}${update.message}` : update.message,
+        });
+        if (!progress) return;
+        const next = applyBroadcastUpdate(progress, stage, update);
+        if (next !== progress) {
+          progress = next;
+          persistCheckpoint(progress);
+        }
+      };
+
+      const finalizeFailedRoute = async (paymentHash: string) => {
+        if (!progress) throw new Error("Route checkpoint is missing");
+        progress = {
+          ...progress,
+          failedPaymentHash: paymentHash,
+          paymentPending: false,
+        };
+        persistCheckpoint(progress);
+        const routeId = Buffer.from(progress.routeId, "hex");
+        try {
+          await recordSettlement({
+            address: wallet.address,
+            routeId,
+            paymentHash,
+            succeeded: false,
+            onUpdate: (update) => updateProgress("receipt", update),
+          });
+        } catch (error) {
+          if (!(error instanceof SubmittedTransactionPendingError)) {
+            progress = {
+              ...progress,
+              receiptTransactionHash: undefined,
+              receiptPending: false,
+            };
+            persistCheckpoint(progress);
+          }
+          throw error;
+        }
+        persistCheckpoint(null);
+        setExecution({
+          phase: "failed",
+          message: "The payment did not complete and the original route was finalized as failed.",
+          hash: paymentHash === "0".repeat(64) ? undefined : paymentHash,
+        });
+        await refreshHistory(wallet.address);
+      };
+
       if (!progress) {
         if (!selected) return;
         track("route_selected", { anchor: selected.anchorId });
+        const routeId = createRouteId();
+        progress = {
+          walletAddress: wallet.address,
+          anchorId: selected.anchorId,
+          routeId: routeId.toString("hex"),
+        };
         try {
-          const route = await createRoute({ address: wallet.address, quote: selected, onUpdate: setExecution });
-          progress = {
-            walletAddress: wallet.address,
-            anchorId: selected.anchorId,
-            routeId: route.routeId.toString("hex"),
-            routeTransactionHash: route.hash,
-          };
+          const route = await createRoute({
+            address: wallet.address,
+            quote: selected,
+            routeId,
+            onUpdate: (update) => updateProgress("route", update),
+          });
+          progress = { ...progress, routeTransactionHash: route.hash };
           persistCheckpoint(progress);
         } catch (error) {
-          if (
-            error instanceof SubmittedTransactionPendingError &&
-            error.stage === "route" &&
-            error.routeId
-          ) {
-            progress = {
-              walletAddress: wallet.address,
-              anchorId: selected.anchorId,
-              routeId: error.routeId,
-              routeTransactionHash: error.hash,
-            };
-            persistCheckpoint(progress);
+          if (!(error instanceof SubmittedTransactionPendingError)) {
+            persistCheckpoint(null);
           }
           throw error;
         }
       }
 
       const routeId = Buffer.from(progress.routeId, "hex");
+      if (progress.failedPaymentHash) {
+        await finalizeFailedRoute(progress.failedPaymentHash);
+        return;
+      }
       if (progress.paymentPending && progress.paymentHash) {
-        const confirmed = await findConfirmedXlmTransaction(progress.paymentHash);
-        if (!confirmed) {
+        const lookup = await findConfirmedXlmTransaction(progress.paymentHash);
+        if (lookup.status === "not_found") {
           setExecution({
             phase: "idle",
             message: "The saved payment is not confirmed yet. Check it again before continuing; no new payment will be sent.",
@@ -276,7 +399,15 @@ export function AnchorScoutApp({ contractsConfigured }: { contractsConfigured: b
           });
           return;
         }
-        progress = { ...progress, paymentPending: false };
+        if (lookup.status === "failed") {
+          await finalizeFailedRoute(lookup.transaction.hash);
+          return;
+        }
+        progress = {
+          ...progress,
+          paymentHash: lookup.transaction.hash,
+          paymentPending: false,
+        };
         persistCheckpoint(progress);
       }
 
@@ -284,58 +415,41 @@ export function AnchorScoutApp({ contractsConfigured }: { contractsConfigured: b
         try {
           const payment = await sendXlm({
             source: wallet.address, destination: DEMO_PAYMENT_DESTINATION, amount: "0.1", signTransaction: walletSigner(wallet.address),
-            onUpdate: (update) => setExecution({ ...update, message: `Demo payment: ${update.message}` }),
+            onUpdate: (update) => updateProgress("payment", update, "Demo payment: "),
           });
           progress = { ...progress, paymentHash: payment.hash, paymentPending: false };
           persistCheckpoint(progress);
         } catch (error) {
           if (error instanceof SubmittedTransactionPendingError && error.stage === "payment") {
-            progress = { ...progress, paymentHash: error.hash, paymentPending: true };
-            persistCheckpoint(progress);
             throw error;
           }
-          try {
-            await recordSettlement({
-              address: wallet.address,
-              routeId,
-              paymentHash: "0".repeat(64),
-              succeeded: false,
-              onUpdate: setExecution,
-            });
-            persistCheckpoint(null);
-            setExecution({
-              phase: "failed",
-              message: "The payment did not complete and the original route was finalized as failed.",
-            });
-            await refreshHistory(wallet.address);
-            return;
-          } catch (settlementError) {
-            if (
-              settlementError instanceof SubmittedTransactionPendingError &&
-              settlementError.stage === "receipt"
-            ) {
-              persistCheckpoint({
-                ...progress,
-                receiptPending: true,
-                receiptTransactionHash: settlementError.hash,
-              });
-            }
-            throw settlementError;
-          }
+          await finalizeFailedRoute(
+            error instanceof TerminalPaymentFailedError
+              ? error.hash
+              : "0".repeat(64),
+          );
+          return;
         }
       }
 
       const confirmedPaymentHash = progress.paymentHash;
       if (!confirmedPaymentHash) throw new Error("Confirmed payment hash is missing");
       try {
-        await recordSettlement({ address: wallet.address, routeId, paymentHash: confirmedPaymentHash, succeeded: true, onUpdate: setExecution });
+        await recordSettlement({
+          address: wallet.address,
+          routeId,
+          paymentHash: confirmedPaymentHash,
+          succeeded: true,
+          onUpdate: (update) => updateProgress("receipt", update),
+        });
       } catch (error) {
-        if (error instanceof SubmittedTransactionPendingError && error.stage === "receipt") {
-          persistCheckpoint({
+        if (!(error instanceof SubmittedTransactionPendingError)) {
+          progress = {
             ...progress,
-            receiptPending: true,
-            receiptTransactionHash: error.hash,
-          });
+            receiptTransactionHash: undefined,
+            receiptPending: false,
+          };
+          persistCheckpoint(progress);
         }
         throw error;
       }
@@ -348,6 +462,8 @@ export function AnchorScoutApp({ contractsConfigured }: { contractsConfigured: b
         void refreshHistory(wallet.address);
       }
       track("route_settlement_failed");
+    } finally {
+      executionLock.current = false;
     }
   };
 
@@ -413,7 +529,7 @@ export function AnchorScoutApp({ contractsConfigured }: { contractsConfigured: b
 
       <section className="history-section">
         <div className="section-heading"><div><span className="step">04</span><h2>Contract-backed history</h2></div>{wallet && <button className="text-button" onClick={() => refreshHistory(wallet.address)} disabled={historyBusy}>↻ Refresh</button>}</div>
-        {!wallet ? <div className="history-empty">Connect a wallet to load its durable Route Registry records.</div> : historyBusy && history.length === 0 ? <div className="history-empty">Reading contract state…</div> : historyError ? <div className="notice error">{historyError}</div> : history.length === 0 ? <div className="history-empty">No routes recorded for this wallet yet.</div> : <div className="history-list">{history.map((route) => <article key={route.routeId}><div><span className={`status-dot ${route.status.toLowerCase()}`} /><strong>{route.anchorId}</strong><small>{new Date(route.selectedAt * 1000).toLocaleString()}</small></div><div><strong>{route.sourceAmount} {route.sourceAsset}</strong><span>→</span><strong>{peso.format(Number(route.destinationAmount))}</strong></div><div><span className={`status-badge ${route.status.toLowerCase()}`}>{route.status}</span>{route.paymentHash && <a href={stellarExpertUrl("tx", route.paymentHash)} target="_blank" rel="noreferrer">Payment {short(route.paymentHash, 8)} ↗</a>}<span title={route.receiptId ?? undefined}>{route.receiptId ? `Receipt ${short(route.receiptId, 8)}` : "Receipt pending"}</span></div></article>)}</div>}
+        {!wallet ? <div className="history-empty">Connect a wallet to load its durable Route Registry records.</div> : historyBusy && history.length === 0 ? <div className="history-empty">Reading contract state…</div> : historyError ? <div className="notice error">{historyError}</div> : history.length === 0 ? <div className="history-empty">No routes recorded for this wallet yet.</div> : <div className="history-list">{history.map((route) => <article key={route.routeId}><div><span className={`status-dot ${route.status.toLowerCase()}`} /><strong>{route.anchorId}</strong><small>{new Date(route.selectedAt * 1000).toLocaleString()}</small></div><div><strong>{route.sourceAmount} {route.sourceAsset}</strong><span>→</span><strong>{peso.format(Number(route.destinationAmount))}</strong></div><div><span className={`status-badge ${route.status.toLowerCase()}`}>{route.status}</span>{route.routeTransactionHash && <a href={stellarExpertUrl("tx", route.routeTransactionHash)} target="_blank" rel="noreferrer">Route tx ↗</a>}{route.paymentHash && <a href={stellarExpertUrl("tx", route.paymentHash)} target="_blank" rel="noreferrer">Payment {short(route.paymentHash, 8)} ↗</a>}{route.receiptTransactionHash && <a href={stellarExpertUrl("tx", route.receiptTransactionHash)} target="_blank" rel="noreferrer">Receipt tx ↗</a>}<span title={route.receiptId ?? undefined}>{route.receiptId ? `Receipt ${short(route.receiptId, 8)}` : "Receipt pending"}</span></div></article>)}</div>}
       </section>
 
       <footer><div className="brand"><span className="brand-mark">A</span><span>AnchorScout</span></div><p>Testnet comparison infrastructure. Not a production payout service.</p><a href="https://github.com/stellar" target="_blank" rel="noreferrer">Built on Stellar ↗</a></footer>
