@@ -31,7 +31,12 @@ if (typeof window !== "undefined") {
 }
 
 
-
+export const networks = {
+  testnet: {
+    networkPassphrase: "Test SDF Network ; September 2015",
+    contractId: "CBYCCXCJLFQKUIPNJDQNXXIGV26S4FSXGHRYQQBPU3EYUGE6EXRRDZ5H",
+  }
+} as const
 
 export const RouteError = {
   1: {message:"InvalidAmount"},

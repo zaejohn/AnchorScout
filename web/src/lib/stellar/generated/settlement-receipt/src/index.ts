@@ -31,7 +31,12 @@ if (typeof window !== "undefined") {
 }
 
 
-
+export const networks = {
+  testnet: {
+    networkPassphrase: "Test SDF Network ; September 2015",
+    contractId: "CBQKALTRUEBNTDOKL7UOOSEFPJMHZRQCWV5C6VZA4T3TO4WEB2OIBDJM",
+  }
+} as const
 
 export const SettlementError = {
   1: {message:"InvalidStatus"},
