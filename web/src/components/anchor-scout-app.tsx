@@ -1,14 +1,16 @@
 "use client";
 
 import { track } from "@vercel/analytics";
+import { Buffer } from "buffer";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { isSelectableQuote } from "@/lib/anchors/ranking";
 import type { AnchorQuote, ProviderResult, QuoteSearchResult, RouteRequest } from "@/lib/anchors/types";
-import { sendXlm } from "@/lib/stellar/classic";
+import { findConfirmedXlmTransaction, sendXlm } from "@/lib/stellar/classic";
 import { DEMO_PAYMENT_DESTINATION, stellarExpertUrl } from "@/lib/stellar/config";
 import { createRoute, recordSettlement } from "@/lib/stellar/contracts";
-import { classifyWalletError, type TransactionUpdate } from "@/lib/stellar/errors";
+import { classifyWalletError, SubmittedTransactionPendingError, type TransactionUpdate } from "@/lib/stellar/errors";
+import { parseProofCheckpoint, resumableProofLabel, type ProofCheckpoint } from "@/lib/stellar/proof";
 import { connectWallet, disconnectWallet, restoreWallet, walletSigner } from "@/lib/stellar/wallet";
 
 type WalletSession = { address: string; walletId: string };
@@ -20,6 +22,7 @@ type HistoryRoute = {
 };
 
 const initialTransfer: TransactionUpdate = { phase: "idle", message: "Ready for a Testnet XLM transfer." };
+const PROOF_CHECKPOINT_KEY = "anchorscout:proof-checkpoint";
 const short = (value: string, leading = 6) => value.length > 18 ? `${value.slice(0, leading)}…${value.slice(-6)}` : value;
 const peso = new Intl.NumberFormat("en-PH", { style: "currency", currency: "PHP", maximumFractionDigits: 2 });
 const phaseLabel = (phase: TransactionUpdate["phase"]) => phase.replaceAll("_", " ");
@@ -41,6 +44,7 @@ export function AnchorScoutApp({ contractsConfigured }: { contractsConfigured: b
   const [quoteError, setQuoteError] = useState("");
   const [selected, setSelected] = useState<AnchorQuote | null>(null);
   const [execution, setExecution] = useState<TransactionUpdate>({ phase: "idle", message: "Select a live quote to start the on-chain route flow." });
+  const [checkpoint, setCheckpoint] = useState<ProofCheckpoint | null>(null);
   const [history, setHistory] = useState<HistoryRoute[]>([]);
   const [historyBusy, setHistoryBusy] = useState(false);
   const [historyError, setHistoryError] = useState("");
@@ -48,6 +52,12 @@ export function AnchorScoutApp({ contractsConfigured }: { contractsConfigured: b
   const eventCursor = useRef<string | null>(null);
   const seenEvents = useRef(new Set<string>());
   const nativeBalance = balances.find((balance) => balance.asset === "XLM")?.balance;
+
+  const persistCheckpoint = useCallback((value: ProofCheckpoint | null) => {
+    setCheckpoint(value);
+    if (value) localStorage.setItem(PROOF_CHECKPOINT_KEY, JSON.stringify(value));
+    else localStorage.removeItem(PROOF_CHECKPOINT_KEY);
+  }, []);
 
   const refreshBalances = useCallback(async (address: string) => {
     setBalanceBusy(true); setBalanceError("");
@@ -90,6 +100,65 @@ export function AnchorScoutApp({ contractsConfigured }: { contractsConfigured: b
     }, 0);
     return () => window.clearTimeout(timer);
   }, [wallet, refreshBalances, refreshHistory]);
+
+  useEffect(() => {
+    if (!wallet) return;
+    const timer = window.setTimeout(() => {
+      const restored = parseProofCheckpoint(
+        localStorage.getItem(PROOF_CHECKPOINT_KEY),
+        wallet.address,
+      );
+      if (!restored) return;
+      setCheckpoint(restored);
+      setExecution({
+        phase: "pending",
+        message: "Checking the saved proof before any transaction can be submitted again.",
+        hash:
+          restored.receiptTransactionHash ??
+          restored.paymentHash ??
+          restored.routeTransactionHash,
+      });
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [wallet]);
+
+  useEffect(() => {
+    if (!checkpoint) return;
+    const savedRoute = history.find((route) => route.routeId === checkpoint.routeId);
+    if (!savedRoute) return;
+    const timer = window.setTimeout(() => {
+      if (savedRoute.status === "COMPLETED" || savedRoute.status === "FAILED") {
+        persistCheckpoint(null);
+        setExecution({
+          phase: savedRoute.status === "COMPLETED" ? "confirmed" : "failed",
+          message:
+            savedRoute.status === "COMPLETED"
+              ? "Saved settlement reconciled from contract state."
+              : "The saved route is finalized as failed; no payment will be repeated.",
+          hash: checkpoint.receiptTransactionHash ?? checkpoint.paymentHash,
+        });
+        return;
+      }
+      if (checkpoint.receiptPending) {
+        setExecution({
+          phase: "pending",
+          message: "The submitted receipt is still pending. AnchorScout will not submit another receipt.",
+          hash: checkpoint.receiptTransactionHash,
+        });
+        return;
+      }
+      setExecution({
+        phase: "idle",
+        message: checkpoint.paymentPending
+          ? "The route is confirmed. Check the saved payment hash before continuing."
+          : checkpoint.paymentHash
+            ? "The payment is confirmed. Resume only the settlement receipt."
+            : "The saved route is confirmed. Resume from its payment step.",
+        hash: checkpoint.paymentHash ?? checkpoint.routeTransactionHash,
+      });
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [checkpoint, history, persistCheckpoint]);
 
   useEffect(() => {
     const tick = () => setClock(Date.now());
@@ -161,20 +230,125 @@ export function AnchorScoutApp({ contractsConfigured }: { contractsConfigured: b
   };
 
   const handleExecute = async () => {
-    if (!wallet || !selected) return;
-    if (!isSelectableQuote(selected, new Date())) return setExecution({ phase: "expired", message: "This quote expired. Refresh routes before signing." });
+    if (!wallet || (!selected && !checkpoint)) return;
+    if (!checkpoint && selected && !isSelectableQuote(selected, new Date())) return setExecution({ phase: "expired", message: "This quote expired. Refresh routes before signing." });
     if (!contractsConfigured || !DEMO_PAYMENT_DESTINATION) return setExecution({ phase: "failed", message: "The public Testnet deployment is not configured in this build." });
     try {
-      track("route_selected", { anchor: selected.anchorId });
-      const route = await createRoute({ address: wallet.address, quote: selected, onUpdate: setExecution });
-      const payment = await sendXlm({
-        source: wallet.address, destination: DEMO_PAYMENT_DESTINATION, amount: "0.1", signTransaction: walletSigner(wallet.address),
-        onUpdate: (update) => setExecution({ ...update, message: `Demo payment: ${update.message}` }),
-      });
-      await recordSettlement({ address: wallet.address, routeId: route.routeId, paymentHash: payment.hash, succeeded: true, onUpdate: setExecution });
-      track("route_settlement_confirmed", { anchor: selected.anchorId });
+      let progress = checkpoint?.walletAddress === wallet.address ? checkpoint : null;
+      if (!progress) {
+        if (!selected) return;
+        track("route_selected", { anchor: selected.anchorId });
+        try {
+          const route = await createRoute({ address: wallet.address, quote: selected, onUpdate: setExecution });
+          progress = {
+            walletAddress: wallet.address,
+            anchorId: selected.anchorId,
+            routeId: route.routeId.toString("hex"),
+            routeTransactionHash: route.hash,
+          };
+          persistCheckpoint(progress);
+        } catch (error) {
+          if (
+            error instanceof SubmittedTransactionPendingError &&
+            error.stage === "route" &&
+            error.routeId
+          ) {
+            progress = {
+              walletAddress: wallet.address,
+              anchorId: selected.anchorId,
+              routeId: error.routeId,
+              routeTransactionHash: error.hash,
+            };
+            persistCheckpoint(progress);
+          }
+          throw error;
+        }
+      }
+
+      const routeId = Buffer.from(progress.routeId, "hex");
+      if (progress.paymentPending && progress.paymentHash) {
+        const confirmed = await findConfirmedXlmTransaction(progress.paymentHash);
+        if (!confirmed) {
+          setExecution({
+            phase: "idle",
+            message: "The saved payment is not confirmed yet. Check it again before continuing; no new payment will be sent.",
+            hash: progress.paymentHash,
+          });
+          return;
+        }
+        progress = { ...progress, paymentPending: false };
+        persistCheckpoint(progress);
+      }
+
+      if (!progress.paymentHash) {
+        try {
+          const payment = await sendXlm({
+            source: wallet.address, destination: DEMO_PAYMENT_DESTINATION, amount: "0.1", signTransaction: walletSigner(wallet.address),
+            onUpdate: (update) => setExecution({ ...update, message: `Demo payment: ${update.message}` }),
+          });
+          progress = { ...progress, paymentHash: payment.hash, paymentPending: false };
+          persistCheckpoint(progress);
+        } catch (error) {
+          if (error instanceof SubmittedTransactionPendingError && error.stage === "payment") {
+            progress = { ...progress, paymentHash: error.hash, paymentPending: true };
+            persistCheckpoint(progress);
+            throw error;
+          }
+          try {
+            await recordSettlement({
+              address: wallet.address,
+              routeId,
+              paymentHash: "0".repeat(64),
+              succeeded: false,
+              onUpdate: setExecution,
+            });
+            persistCheckpoint(null);
+            setExecution({
+              phase: "failed",
+              message: "The payment did not complete and the original route was finalized as failed.",
+            });
+            await refreshHistory(wallet.address);
+            return;
+          } catch (settlementError) {
+            if (
+              settlementError instanceof SubmittedTransactionPendingError &&
+              settlementError.stage === "receipt"
+            ) {
+              persistCheckpoint({
+                ...progress,
+                receiptPending: true,
+                receiptTransactionHash: settlementError.hash,
+              });
+            }
+            throw settlementError;
+          }
+        }
+      }
+
+      const confirmedPaymentHash = progress.paymentHash;
+      if (!confirmedPaymentHash) throw new Error("Confirmed payment hash is missing");
+      try {
+        await recordSettlement({ address: wallet.address, routeId, paymentHash: confirmedPaymentHash, succeeded: true, onUpdate: setExecution });
+      } catch (error) {
+        if (error instanceof SubmittedTransactionPendingError && error.stage === "receipt") {
+          persistCheckpoint({
+            ...progress,
+            receiptPending: true,
+            receiptTransactionHash: error.hash,
+          });
+        }
+        throw error;
+      }
+      persistCheckpoint(null);
+      track("route_settlement_confirmed", { anchor: progress.anchorId });
       await Promise.all([refreshHistory(wallet.address), refreshBalances(wallet.address)]);
-    } catch (error) { setExecution(classifyWalletError(error)); track("route_settlement_failed"); }
+    } catch (error) {
+      setExecution(classifyWalletError(error));
+      if (error instanceof SubmittedTransactionPendingError) {
+        void refreshHistory(wallet.address);
+      }
+      track("route_settlement_failed");
+    }
   };
 
   return (
@@ -217,7 +391,7 @@ export function AnchorScoutApp({ contractsConfigured }: { contractsConfigured: b
         <div className="section-heading"><div><span className="step">02</span><h2>Ranked for your outcome</h2></div><p>Highest receive amount first, then fee and speed.</p></div>
         <div className="quote-grid">{quoteBusy ? [1, 2, 3].map((item) => <div className="quote-card skeleton" key={item} />) : liveQuotes.map((quote) => {
           const seconds = Math.max(0, Math.floor((Date.parse(quote.expiresAt) - clock) / 1000)); const selectable = isSelectableQuote(quote, new Date(clock));
-          return <article className={`quote-card ${selected?.quoteId === quote.quoteId ? "selected" : ""}`} key={quote.quoteId}><div className="quote-top"><span className="rank">#{quote.rank}</span>{quote.best && <span className="best">Best outcome</span>}<span className={`expiry ${!selectable ? "expired" : ""}`}>{selectable ? `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")} left` : "Expired"}</span></div><p className="anchor-name">{quote.anchorName} {quote.isDemo && <small>DEMO</small>}</p><strong className="receive">{peso.format(Number(quote.destinationAmount))}</strong><dl><div><dt>Rate</dt><dd>₱{quote.exchangeRate}</dd></div><div><dt>Fee</dt><dd>{quote.fee} {quote.sourceAsset === "TEST_USDC" ? "USDC" : quote.sourceAsset}</dd></div><div><dt>Estimate</dt><dd>~{quote.estimatedMinutes} min</dd></div></dl><button className="button secondary wide" disabled={!selectable} onClick={() => { setSelected(quote); setExecution({ phase: "idle", message: "Route selected. Review the Testnet proof flow below." }); }}>{selected?.quoteId === quote.quoteId ? "Selected ✓" : selectable ? "Choose this route" : "Refresh required"}</button></article>;
+          return <article className={`quote-card ${selected?.quoteId === quote.quoteId ? "selected" : ""}`} key={quote.quoteId}><div className="quote-top"><span className="rank">#{quote.rank}</span>{quote.best && <span className="best">Best outcome</span>}<span className={`expiry ${!selectable ? "expired" : ""}`}>{selectable ? `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")} left` : "Expired"}</span></div><p className="anchor-name">{quote.anchorName} {quote.isDemo && <small>DEMO</small>}</p><strong className="receive">{peso.format(Number(quote.destinationAmount))}</strong><dl><div><dt>Rate</dt><dd>₱{quote.exchangeRate}</dd></div><div><dt>Fee</dt><dd>{quote.fee} {quote.sourceAsset === "TEST_USDC" ? "USDC" : quote.sourceAsset}</dd></div><div><dt>Estimate</dt><dd>~{quote.estimatedMinutes} min</dd></div></dl><button className="button secondary wide" disabled={!selectable || Boolean(checkpoint)} onClick={() => { setSelected(quote); setExecution({ phase: "idle", message: "Route selected. Review the Testnet proof flow below." }); }}>{checkpoint ? "Finish saved proof first" : selected?.quoteId === quote.quoteId ? "Selected ✓" : selectable ? "Choose this route" : "Refresh required"}</button></article>;
         })}</div>
       </section>}
 
@@ -227,7 +401,7 @@ export function AnchorScoutApp({ contractsConfigured }: { contractsConfigured: b
           <ol className="flow-list"><li className={selected ? "active" : ""}><b>1</b><span><strong>Record route</strong><small>Route Registry contract</small></span></li><li><b>2</b><span><strong>Send 0.1 XLM</strong><small>Horizon-confirmed Testnet payment</small></span></li><li><b>3</b><span><strong>Attest receipt</strong><small>Wallet-authorized cross-contract result</small></span></li></ol>
           {!contractsConfigured && <div className="notice warning">Contract actions unlock after the Testnet deployment IDs are configured.</div>}
           <TransactionStatus update={execution} />
-          <button className="button primary wide" disabled={!wallet || !selected || !contractsConfigured || !["idle", "failed", "rejected", "expired", "confirmed"].includes(execution.phase)} onClick={handleExecute}>{!wallet ? "Connect wallet to continue" : !selected ? "Choose a live route" : "Sign route and settle"}</button>
+          <button className="button primary wide" disabled={!wallet || (!selected && !checkpoint) || !contractsConfigured || !["idle", "failed", "rejected", "expired", "confirmed"].includes(execution.phase)} onClick={handleExecute}>{!wallet ? "Connect wallet to continue" : checkpoint ? resumableProofLabel(checkpoint) : !selected ? "Choose a live route" : "Sign route and settle"}</button>
           <p className="fine-print">The 0.1 XLM payment is separate from the indicative PHP quote. Its hash is confirmed by the app through Horizon and then user-attested on-chain; the receipt contract cannot independently query classic transaction history. No real fiat payout occurs.</p>
         </article>
 

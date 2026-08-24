@@ -11,7 +11,7 @@ import {
   STELLAR_RPC_URL,
   hasContractDeployment,
 } from "./config";
-import type { TransactionUpdate } from "./errors";
+import { SubmittedTransactionPendingError, type TransactionUpdate } from "./errors";
 import { decimalToUnits } from "./units";
 import { walletSigner } from "./wallet";
 import type { AnchorQuote } from "../anchors/types";
@@ -71,21 +71,32 @@ export async function createRoute(params: {
   });
   onUpdate({ phase: "awaiting_signature", message: "Authorize route selection in your wallet." });
   let submittedHash: string | undefined;
-  const sent = await transaction.signAndSend({
-    watcher: {
-      onSubmitted(response) {
-        submittedHash = response?.hash;
-        onUpdate({ phase: "submitted", message: "Route transaction submitted…", hash: submittedHash });
+  try {
+    await transaction.signAndSend({
+      watcher: {
+        onSubmitted(response) {
+          submittedHash = response?.hash;
+          onUpdate({ phase: "submitted", message: "Route transaction submitted…", hash: submittedHash });
+        },
+        onProgress(response) {
+          if (response?.status === "NOT_FOUND") {
+            onUpdate({ phase: "pending", message: "Waiting for route confirmation…", hash: submittedHash });
+          }
+        },
       },
-      onProgress(response) {
-        if (response?.status === "NOT_FOUND") {
-          onUpdate({ phase: "pending", message: "Waiting for route confirmation…", hash: submittedHash });
-        }
-      },
-    },
-  });
+    });
+  } catch (error) {
+    if (submittedHash) {
+      throw new SubmittedTransactionPendingError(
+        "route",
+        submittedHash,
+        routeId.toString("hex"),
+      );
+    }
+    throw error;
+  }
   onUpdate({ phase: "confirmed", message: "Route selection recorded on-chain.", hash: submittedHash });
-  return { routeId, hash: submittedHash, route: sent.result };
+  return { routeId, hash: submittedHash };
 }
 
 export async function recordSettlement(params: {
@@ -111,21 +122,32 @@ export async function recordSettlement(params: {
   });
   onUpdate({ phase: "awaiting_signature", message: "Authorize the settlement receipt." });
   let submittedHash: string | undefined;
-  const sent = await transaction.signAndSend({
-    watcher: {
-      onSubmitted(response) {
-        submittedHash = response?.hash;
-        onUpdate({ phase: "submitted", message: "Receipt transaction submitted…", hash: submittedHash });
+  try {
+    await transaction.signAndSend({
+      watcher: {
+        onSubmitted(response) {
+          submittedHash = response?.hash;
+          onUpdate({ phase: "submitted", message: "Receipt transaction submitted…", hash: submittedHash });
+        },
+        onProgress(response) {
+          if (response?.status === "NOT_FOUND") {
+            onUpdate({ phase: "pending", message: "Waiting for settlement confirmation…", hash: submittedHash });
+          }
+        },
       },
-      onProgress(response) {
-        if (response?.status === "NOT_FOUND") {
-          onUpdate({ phase: "pending", message: "Waiting for settlement confirmation…", hash: submittedHash });
-        }
-      },
-    },
-  });
+    });
+  } catch (error) {
+    if (submittedHash) {
+      throw new SubmittedTransactionPendingError(
+        "receipt",
+        submittedHash,
+        routeId.toString("hex"),
+      );
+    }
+    throw error;
+  }
   onUpdate({ phase: "confirmed", message: "Settlement finalized across both contracts.", hash: submittedHash });
-  return { hash: submittedHash, receipt: sent.result };
+  return { hash: submittedHash };
 }
 
 export async function getWalletRoutes(address: string): Promise<RouteRecord[]> {

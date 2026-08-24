@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { classifyWalletError } from "./errors";
+import { classifyWalletError, SubmittedTransactionPendingError } from "./errors";
 
 describe("wallet error mapping", () => {
   it.each([
@@ -15,5 +15,18 @@ describe("wallet error mapping", () => {
   it("does not expose unknown provider details", () => {
     const result = classifyWalletError(new Error("private upstream payload"));
     expect(result.message).not.toContain("private upstream");
+  });
+
+  it("preserves an ambiguously submitted hash without making it retryable", () => {
+    expect(
+      classifyWalletError(
+        new SubmittedTransactionPendingError("receipt", "a".repeat(64)),
+      ),
+    ).toEqual({
+      phase: "pending",
+      message:
+        "The receipt transaction was submitted but confirmation is still pending. AnchorScout will not submit it again.",
+      hash: "a".repeat(64),
+    });
   });
 });

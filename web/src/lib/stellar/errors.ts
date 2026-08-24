@@ -18,10 +18,28 @@ export type TransactionUpdate = {
   hash?: string;
 };
 
+export class SubmittedTransactionPendingError extends Error {
+  constructor(
+    readonly stage: "route" | "payment" | "receipt",
+    readonly hash: string,
+    readonly routeId?: string,
+  ) {
+    super(`${stage} transaction ${hash} was submitted but is still pending`);
+    this.name = "SubmittedTransactionPendingError";
+  }
+}
+
 const messageOf = (error: unknown) =>
   error instanceof Error ? error.message : String(error ?? "Unknown error");
 
 export function classifyWalletError(error: unknown): TransactionUpdate {
+  if (error instanceof SubmittedTransactionPendingError) {
+    return {
+      phase: "pending",
+      message: `The ${error.stage} transaction was submitted but confirmation is still pending. AnchorScout will not submit it again.`,
+      hash: error.hash,
+    };
+  }
   const raw = messageOf(error).toLowerCase();
   if (
     raw.includes("reject") ||
@@ -63,4 +81,3 @@ export function classifyWalletError(error: unknown): TransactionUpdate {
     message: "The Stellar transaction could not be completed. Please try again.",
   };
 }
-

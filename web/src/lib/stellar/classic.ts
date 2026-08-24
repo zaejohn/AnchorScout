@@ -12,7 +12,11 @@ import {
   STELLAR_HORIZON_URL,
   STELLAR_NETWORK_PASSPHRASE,
 } from "./config";
-import { classifyWalletError, type TransactionUpdate } from "./errors";
+import {
+  classifyWalletError,
+  SubmittedTransactionPendingError,
+  type TransactionUpdate,
+} from "./errors";
 import { decimalToUnits } from "./units";
 
 const AMOUNT_PATTERN = /^\d+(?:\.\d{1,7})?$/;
@@ -27,6 +31,17 @@ export function validateXlmTransferInput(destination: string, amount: string) {
   const amountStroops = decimalToUnits(amount, 7);
   if (amountStroops <= 0n) throw new Error("Invalid XLM amount");
   return amountStroops;
+}
+
+export async function findConfirmedXlmTransaction(hash: string) {
+  const response = await fetch(`${STELLAR_HORIZON_URL}/transactions/${hash}`, {
+    cache: "no-store",
+    signal: AbortSignal.timeout(5_000),
+  });
+  if (response.status === 404) return null;
+  if (!response.ok) throw new Error(`Horizon returned ${response.status}`);
+  const transaction = (await response.json()) as { hash: string; ledger: number; successful: boolean };
+  return transaction.successful ? transaction : null;
 }
 
 export async function sendXlm(params: {
@@ -68,8 +83,18 @@ export async function sendXlm(params: {
       signedTxXdr,
       STELLAR_NETWORK_PASSPHRASE,
     );
-    onUpdate({ phase: "submitting", message: "Submitting transaction…" });
-    const result = await server.submitTransaction(signed);
+    const paymentHash = signed.hash().toString("hex");
+    onUpdate({ phase: "submitting", message: "Submitting transaction…", hash: paymentHash });
+    let result: { hash: string; ledger: number };
+    try {
+      result = await server.submitTransaction(signed);
+    } catch {
+      const confirmed = await findConfirmedXlmTransaction(paymentHash).catch(() => null);
+      if (!confirmed) {
+        throw new SubmittedTransactionPendingError("payment", paymentHash);
+      }
+      result = confirmed;
+    }
     onUpdate({
       phase: "submitted",
       message: "Transaction submitted. Confirming ledger inclusion…",

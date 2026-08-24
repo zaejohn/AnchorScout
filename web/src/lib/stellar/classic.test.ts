@@ -1,8 +1,10 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { validateXlmTransferInput } from "./classic";
+import { findConfirmedXlmTransaction, validateXlmTransferInput } from "./classic";
 
 const DESTINATION = "GDW2INHQPIWK6JYMVDPCT3JZHMBSYPDEWB56PCRC2JSXADAF22VF253M";
+
+afterEach(() => vi.unstubAllGlobals());
 
 describe("XLM transfer preflight", () => {
   it("accepts valid G-addresses and exact stroop amounts", () => {
@@ -24,4 +26,24 @@ describe("XLM transfer preflight", () => {
       );
     },
   );
+});
+
+describe("ambiguous XLM submission reconciliation", () => {
+  it("returns null while Horizon has no record and never invents confirmation", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(null, { status: 404 })));
+    await expect(findConfirmedXlmTransaction("a".repeat(64))).resolves.toBeNull();
+  });
+
+  it("returns only a successful Horizon transaction", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        Response.json({ hash: "b".repeat(64), ledger: 123, successful: true }),
+      ),
+    );
+    await expect(findConfirmedXlmTransaction("b".repeat(64))).resolves.toMatchObject({
+      hash: "b".repeat(64),
+      ledger: 123,
+    });
+  });
 });
