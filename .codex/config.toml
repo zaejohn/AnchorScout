@@ -1,0 +1,6 @@
+[agents]
+max_concurrent_threads_per_session = 6
+
+# Raven is also configured on the stellar_researcher subagent.
+# Run scripts/setup-codex-stellar.ps1 (Windows) or .sh (macOS/Linux)
+# to install the official Stellar skill globally and authenticate Raven.
