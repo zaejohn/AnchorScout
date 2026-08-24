@@ -105,7 +105,7 @@ Verified release result:
 
 - ESLint: passed
 - TypeScript: passed
-- Frontend/domain tests: 69 passed across 11 files
+- Frontend/domain tests: 71 passed across 11 files
 - Next.js 16.3.2 production build: passed
 - Soroban tests: 16 passed
 - Optimized contract builds: passed

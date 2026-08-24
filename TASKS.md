@@ -14,7 +14,7 @@
 - [x] Add wallet-signed route recording and settlement, contract-event polling/deduplication, and durable wallet-scoped history
 - [x] Add Vercel Web Analytics and non-sensitive product events
 - [x] Add repeatable PowerShell/Bash Testnet deployment scripts and GitHub Actions release gates
-- [x] Pass web lint, typecheck, 69 tests across 11 files, production build, 16 contract tests, and optimized contract builds
+- [x] Pass web lint, typecheck, 71 tests across 11 files, production build, 16 contract tests, and optimized contract builds
 - [x] Complete specialist contract review and Testnet release re-review
 - [x] Deploy both contracts and complete a real route → 0.1 XLM → receipt/finalization flow on Testnet
 - [x] Verify the desktop and 390 px mobile route flow in-browser with no horizontal overflow
