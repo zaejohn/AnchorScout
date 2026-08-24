@@ -15,7 +15,8 @@ type Sep38PriceResponse = {
   fee: { total: string };
 };
 
-const blockedAddresses = new BlockList();
+const blockedIpv4 = new BlockList();
+const blockedIpv6 = new BlockList();
 for (const [network, prefix] of [
   ["0.0.0.0", 8], ["10.0.0.0", 8], ["100.64.0.0", 10],
   ["127.0.0.0", 8], ["169.254.0.0", 16], ["172.16.0.0", 12],
@@ -23,22 +24,19 @@ for (const [network, prefix] of [
   ["198.18.0.0", 15], ["198.51.100.0", 24], ["203.0.113.0", 24],
   ["224.0.0.0", 4], ["240.0.0.0", 4],
 ] as const) {
-  blockedAddresses.addSubnet(network, prefix, "ipv4");
+  blockedIpv4.addSubnet(network, prefix, "ipv4");
 }
 for (const [network, prefix] of [
-  ["::", 128], ["::1", 128], ["fc00::", 7],
+  ["::", 128], ["::1", 128], ["::ffff:0:0", 96], ["fc00::", 7],
   ["fe80::", 10], ["ff00::", 8], ["2001:db8::", 32],
 ] as const) {
-  blockedAddresses.addSubnet(network, prefix, "ipv6");
+  blockedIpv6.addSubnet(network, prefix, "ipv6");
 }
 
 export function isPublicAddress(address: string) {
   const version = isIP(address);
-  if (version === 4) return !blockedAddresses.check(address, "ipv4");
-  if (version === 6) {
-    if (address.toLowerCase().startsWith("::ffff:")) return false;
-    return !blockedAddresses.check(address, "ipv6");
-  }
+  if (version === 4) return !blockedIpv4.check(address, "ipv4");
+  if (version === 6) return !blockedIpv6.check(address, "ipv6");
   return false;
 }
 
