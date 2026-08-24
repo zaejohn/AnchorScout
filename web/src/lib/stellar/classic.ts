@@ -13,8 +13,21 @@ import {
   STELLAR_NETWORK_PASSPHRASE,
 } from "./config";
 import { classifyWalletError, type TransactionUpdate } from "./errors";
+import { decimalToUnits } from "./units";
 
 const AMOUNT_PATTERN = /^\d+(?:\.\d{1,7})?$/;
+
+export function validateXlmTransferInput(destination: string, amount: string) {
+  if (!StrKey.isValidEd25519PublicKey(destination)) {
+    throw new Error("Invalid Stellar destination address");
+  }
+  if (!AMOUNT_PATTERN.test(amount)) {
+    throw new Error("Invalid XLM amount");
+  }
+  const amountStroops = decimalToUnits(amount, 7);
+  if (amountStroops <= 0n) throw new Error("Invalid XLM amount");
+  return amountStroops;
+}
 
 export async function sendXlm(params: {
   source: string;
@@ -26,17 +39,13 @@ export async function sendXlm(params: {
   const { source, destination, amount, signTransaction, onUpdate } = params;
   try {
     onUpdate({ phase: "preparing", message: "Checking account and balance…" });
-    if (!StrKey.isValidEd25519PublicKey(destination)) {
-      throw new Error("Invalid Stellar destination address");
-    }
-    if (!AMOUNT_PATTERN.test(amount) || Number(amount) <= 0) {
-      throw new Error("Invalid XLM amount");
-    }
+    const amountStroops = validateXlmTransferInput(destination, amount);
 
     const server = new Horizon.Server(STELLAR_HORIZON_URL);
     const account = await server.loadAccount(source);
     const native = account.balances.find((balance) => balance.asset_type === "native");
-    if (!native || Number(native.balance) <= Number(amount) + Number(BASE_FEE) / 1e7) {
+    const availableStroops = native ? decimalToUnits(native.balance, 7) : 0n;
+    if (availableStroops <= amountStroops + BigInt(BASE_FEE)) {
       throw new Error("Insufficient XLM balance");
     }
     const transaction = new TransactionBuilder(account, {
@@ -76,9 +85,10 @@ export async function sendXlm(params: {
     const update = classifyWalletError(error);
     if (error instanceof Error && error.message.includes("Invalid Stellar")) {
       update.message = "Enter a valid Stellar G-address.";
+    } else if (error instanceof Error && error.message.includes("Invalid XLM")) {
+      update.message = "Enter a positive XLM amount with at most 7 decimals.";
     }
     onUpdate(update);
     throw error;
   }
 }
-
