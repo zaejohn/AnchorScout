@@ -113,4 +113,20 @@ describe("provider isolation", () => {
     expect(result.quotes).toHaveLength(0);
     expect(result.providers[0]).toMatchObject({ status: "timed_out" });
   });
+
+  it.each([
+    { sourceAmount: "99" },
+    { sourceAsset: "TEST_USDC" },
+    { destinationCurrency: "USD" },
+    { payoutMethod: "GCASH" },
+  ])("rejects a provider quote that changes request terms: %j", async (override) => {
+    const mismatched: AnchorProvider = {
+      id: "mismatched",
+      name: "Mismatched",
+      getQuote: async () => raw(override),
+    };
+    const result = await searchQuotes(request, [mismatched], { now });
+    expect(result.quotes).toHaveLength(0);
+    expect(result.providers[0]).toMatchObject({ status: "failed" });
+  });
 });

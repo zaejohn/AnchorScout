@@ -17,6 +17,23 @@ class ProviderTimeoutError extends Error {
   }
 }
 
+const decimalKey = (value: string) => {
+  const [integer, fraction = ""] = value.split(".");
+  return `${BigInt(integer)}.${fraction.padEnd(7, "0")}`;
+};
+
+function assertQuoteMatchesRequest(quote: AnchorQuote, request: RouteRequest) {
+  if (
+    quote.sourceAsset !== request.sourceAsset ||
+    quote.destinationCurrency !== request.destinationCurrency ||
+    quote.payoutMethod !== request.payoutMethod ||
+    decimalKey(quote.sourceAmount) !== decimalKey(request.amount)
+  ) {
+    throw new Error("Provider quote does not match the requested route");
+  }
+  return quote;
+}
+
 async function withTimeout<T>(
   run: (signal: AbortSignal) => Promise<T>,
   timeoutMs: number,
@@ -48,12 +65,15 @@ export async function searchQuotes(
   const settled = await Promise.allSettled(
     providers.map(async (provider) => ({
       provider,
-      quote: normalizeQuote(
-        await withTimeout(
-          (signal) => provider.getQuote(request, signal),
-          timeoutMs,
+      quote: assertQuoteMatchesRequest(
+        normalizeQuote(
+          await withTimeout(
+            (signal) => provider.getQuote(request, signal),
+            timeoutMs,
+          ),
+          now,
         ),
-        now,
+        request,
       ),
     })),
   );
