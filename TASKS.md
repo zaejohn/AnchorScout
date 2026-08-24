@@ -20,6 +20,7 @@
 - [x] Complete specialist contract review and Testnet release re-review
 - [x] Deploy both contracts and complete a real route → 0.1 XLM → receipt/finalization flow on Testnet
 - [x] Verify the desktop and 390 px mobile route flow in-browser with no horizontal overflow
+- [x] Add the public responsive landing page at `/` and preserve the complete route-comparison workflow at `/app`
 - [x] Record public network evidence and maintain 20 meaningful implementation commits before final documentation
 
 ## Human-controlled completion gates

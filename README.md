@@ -30,6 +30,13 @@ The screenshots are from the locally running production-shaped application. Publ
 
 AnchorScout never holds funds, requests secret keys, accepts a production provider quote, or signs for users. The external PHP payout remains simulated on Testnet and is explicitly separate from the 0.1 XLM proof payment. The classic payment hash is confirmed through Horizon by the app and user-attested on-chain because Soroban cannot independently query classic transaction history.
 
+## Routes
+
+- `/` — public landing page explaining the route-comparison model, provider attribution, and Stellar proof layer.
+- `/app` — the complete AnchorScout workflow: connect a wallet, enter transfer details, compare providers, select a route, sign, and track the result.
+
+The landing page is intentionally server-rendered and has no wallet state. Its route preview is labeled illustrative; the `/app` comparison cards are the source of live provider data and disclosures.
+
 ## Architecture
 
 ```text

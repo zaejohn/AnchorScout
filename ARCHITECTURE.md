@@ -24,7 +24,8 @@ Settlement Receipt contract --finalize_route--> Route Registry contract
 
 ## Application boundaries
 
-- Server Components render the static application shell and product metadata.
+- The public `/` route is a server-rendered product landing page. It explains the comparison model and links into `/app` without importing wallet code or adding client state.
+- The executable `/app` route renders the existing client-heavy AnchorScout workflow and keeps wallet, balance, forms, countdowns, signatures, transaction lifecycle, event polling, and user feedback together.
 - A focused Client Component owns wallet selection, balance refresh, forms, countdowns, signatures, transaction lifecycle, event polling, and user feedback.
 - `POST /api/quotes` validates untrusted input, runs providers concurrently with per-provider timeouts, normalizes responses, filters expired/malformed quotes, and ranks deterministically.
 - `GET /api/stellar/account/:address` reads public Testnet balances from Horizon.

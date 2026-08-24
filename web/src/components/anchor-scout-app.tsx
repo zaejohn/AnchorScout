@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { track } from "@vercel/analytics";
 import { Buffer } from "buffer";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -476,7 +477,7 @@ export function AnchorScoutApp({ contractsConfigured }: { contractsConfigured: b
   return (
     <main>
       <header className="topbar">
-        <a className="brand" href="#top" aria-label="AnchorScout home"><span className="brand-mark">A</span><span>AnchorScout</span></a>
+        <Link className="brand" href="/" aria-label="AnchorScout home"><span className="brand-mark">A</span><span>AnchorScout</span></Link>
         <div className="network-chip"><span /> Stellar Testnet</div>
         {wallet ? <div className="wallet-actions"><a className="address-chip" href={stellarExpertUrl("account", wallet.address)} target="_blank" rel="noreferrer">{short(wallet.address)} ↗</a><button className="button ghost small" onClick={handleDisconnect} disabled={walletBusy}>Disconnect</button></div> : <button className="button primary small" onClick={handleConnect} disabled={walletBusy}>{walletBusy ? "Checking wallet…" : "Choose wallet"}</button>}
       </header>

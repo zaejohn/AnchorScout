@@ -1,5 +1,13 @@
 # Decisions
 
+## 2026-08-24 — Separate the product story from the executable workflow
+
+- Context: AnchorScout needs a clear entry point without adding marketing UI to the wallet-sensitive comparison flow.
+- Decision: Keep `/` as a server-rendered, responsive landing page with a concise route-comparison preview, and keep the existing client application unchanged in scope at `/app`.
+- Why: The landing page can explain provider attribution, Stellar proof, and the five-step workflow without loading wallet state or duplicating financial logic. A direct `/app` URL remains available for the focused product workflow.
+- Consequences: Public CTAs use an explicit `/app` route, the application brand links back to `/`, and landing visuals are labeled as illustrative rather than live quote data.
+- Revisit when: The product adds authenticated accounts, campaign-specific entry points, or a separate marketing site.
+
 ## 2026-08-24 — Keep authoritative history on-chain
 
 - Context: RPC event retention is bounded, but route history must remain verifiable.
