@@ -4,16 +4,9 @@ import { NextResponse } from "next/server";
 
 import { hasContractDeployment } from "@/lib/stellar/config";
 import { getRouteReceipt, getWalletRoutes } from "@/lib/stellar/contracts";
+import { unitsToDecimal } from "@/lib/stellar/units";
 
 const statusTag = (status: { tag: string }) => status.tag.toUpperCase();
-
-function formatUnits(value: bigint, decimals: number) {
-  const negative = value < 0n;
-  const digits = (negative ? -value : value).toString().padStart(decimals + 1, "0");
-  const integer = digits.slice(0, -decimals);
-  const fraction = digits.slice(-decimals).replace(/0+$/, "");
-  return `${negative ? "-" : ""}${integer}${fraction ? `.${fraction}` : ""}`;
-}
 
 export async function GET(
   _request: Request,
@@ -38,10 +31,10 @@ export async function GET(
           routeId: Buffer.from(route.route_id).toString("hex"),
           anchorId: route.anchor_id,
           sourceAsset: route.source_asset,
-          sourceAmount: formatUnits(route.source_amount, 7),
+          sourceAmount: unitsToDecimal(route.source_amount, 7),
           destinationCurrency: route.destination_currency,
-          destinationAmount: formatUnits(route.destination_amount, 2),
-          fee: formatUnits(route.fee, 7),
+          destinationAmount: unitsToDecimal(route.destination_amount, 2),
+          fee: unitsToDecimal(route.fee, 7),
           selectedAt: Number(route.selected_at),
           status: statusTag(route.status),
           paymentHash: route.transaction_hash

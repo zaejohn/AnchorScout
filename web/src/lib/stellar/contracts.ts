@@ -12,6 +12,7 @@ import {
   hasContractDeployment,
 } from "./config";
 import type { TransactionUpdate } from "./errors";
+import { decimalToUnits } from "./units";
 import { walletSigner } from "./wallet";
 import type { AnchorQuote } from "../anchors/types";
 
@@ -62,10 +63,10 @@ export async function createRoute(params: {
     user: address,
     anchor_id: quote.anchorId,
     source_asset: quote.sourceAsset,
-    source_amount: BigInt(Math.round(Number(quote.sourceAmount) * 1e7)),
+    source_amount: decimalToUnits(quote.sourceAmount, 7),
     destination_currency: quote.destinationCurrency,
-    destination_amount: BigInt(Math.round(Number(quote.destinationAmount) * 100)),
-    fee: BigInt(Math.round(Number(quote.fee) * 1e7)),
+    destination_amount: decimalToUnits(quote.destinationAmount, 2),
+    fee: decimalToUnits(quote.fee, 7),
     quote_hash: quoteHash,
   });
   onUpdate({ phase: "awaiting_signature", message: "Authorize route selection in your wallet." });
