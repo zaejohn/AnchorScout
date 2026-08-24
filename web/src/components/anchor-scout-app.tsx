@@ -45,7 +45,7 @@ export function AnchorScoutApp({ contractsConfigured }: { contractsConfigured: b
   const [historyBusy, setHistoryBusy] = useState(false);
   const [historyError, setHistoryError] = useState("");
   const [clock, setClock] = useState(0);
-  const eventLedger = useRef<number | null>(null);
+  const eventCursor = useRef<string | null>(null);
   const seenEvents = useRef(new Set<string>());
   const nativeBalance = balances.find((balance) => balance.asset === "XLM")?.balance;
 
@@ -103,15 +103,17 @@ export function AnchorScoutApp({ contractsConfigured }: { contractsConfigured: b
     let active = true;
     const poll = async () => {
       try {
-        const query = eventLedger.current ? `?startLedger=${eventLedger.current}` : "";
+        const query = eventCursor.current
+          ? `?cursor=${encodeURIComponent(eventCursor.current)}`
+          : "";
         const response = await fetch(`/api/stellar/events${query}`, { cache: "no-store" });
         if (!response.ok || !active) return;
-        const payload = (await response.json()) as { events: Array<{ id: string }>; nextLedger: number | null };
+        const payload = (await response.json()) as { events: Array<{ id: string }>; cursor: string };
         const newEvent = payload.events.some((event) => {
           if (seenEvents.current.has(event.id)) return false;
           seenEvents.current.add(event.id); return true;
         });
-        eventLedger.current = payload.nextLedger;
+        eventCursor.current = payload.cursor;
         if (newEvent && seenEvents.current.size > payload.events.length) await refreshHistory(wallet.address);
       } catch { /* Manual refresh remains available during transient RPC failures. */ }
     };

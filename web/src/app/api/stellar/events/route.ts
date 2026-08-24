@@ -5,6 +5,7 @@ import {
   STELLAR_RPC_URL,
   hasContractDeployment,
 } from "@/lib/stellar/config";
+import { buildEventRequest } from "@/lib/stellar/events";
 
 async function rpc<T>(method: string, params: Record<string, unknown>) {
   const response = await fetch(STELLAR_RPC_URL, {
@@ -24,33 +25,36 @@ async function rpc<T>(method: string, params: Record<string, unknown>) {
 
 export async function GET(request: Request) {
   if (!hasContractDeployment()) {
-    return noStoreJson({ events: [], configured: false, nextLedger: null });
+    return noStoreJson({ events: [], configured: false, cursor: null });
   }
   try {
     const latest = await rpc<{ sequence: number }>("getLatestLedger", {});
-    const requested = Number(new URL(request.url).searchParams.get("startLedger"));
-    const startLedger = Number.isInteger(requested) && requested > 0
-      ? Math.min(requested, latest.sequence)
-      : Math.max(1, latest.sequence - 100);
+    const searchParams = new URL(request.url).searchParams;
+    const requested = Number(searchParams.get("startLedger"));
+    const cursor = searchParams.get("cursor");
     const result = await rpc<{
       events: Array<{ id: string; ledger: number; contractId?: string; topic?: string[]; value?: string }>;
-    }>("getEvents", {
-      startLedger,
-      filters: [
-        {
-          type: "contract",
-          contractIds: [
-            ROUTE_REGISTRY_CONTRACT_ID,
-            SETTLEMENT_RECEIPT_CONTRACT_ID,
-          ],
-        },
-      ],
-      pagination: { limit: 100 },
-    });
+      cursor: string;
+      latestLedger: number;
+      oldestLedger: number;
+    }>(
+      "getEvents",
+      buildEventRequest({
+        cursor,
+        requestedStartLedger: requested,
+        latestLedger: latest.sequence,
+        contractIds: [
+          ROUTE_REGISTRY_CONTRACT_ID,
+          SETTLEMENT_RECEIPT_CONTRACT_ID,
+        ],
+      }),
+    );
     return noStoreJson({
       configured: true,
       events: result.events,
-      nextLedger: latest.sequence + 1,
+      cursor: result.cursor,
+      latestLedger: result.latestLedger,
+      oldestLedger: result.oldestLedger,
     });
   } catch (error) {
     console.error("contract_event_poll_failed", error);
