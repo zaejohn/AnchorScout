@@ -44,6 +44,7 @@ pub struct SettlementReceiptRecord {
 enum DataKey {
     Registry,
     Receipt(BytesN<32>),
+    ReceiptId(BytesN<32>),
 }
 
 #[contracterror]
@@ -92,7 +93,10 @@ impl SettlementReceipt {
             _ => panic_with_error!(&env, SettlementError::InvalidStatus),
         };
         let receipt_key = DataKey::Receipt(route_id.clone());
-        if env.storage().persistent().has(&receipt_key) {
+        let receipt_id_key = DataKey::ReceiptId(receipt_id.clone());
+        if env.storage().persistent().has(&receipt_key)
+            || env.storage().persistent().has(&receipt_id_key)
+        {
             panic_with_error!(&env, SettlementError::DuplicateReceipt);
         }
 
@@ -115,7 +119,9 @@ impl SettlementReceipt {
             completed_at: env.ledger().timestamp(),
         };
         env.storage().persistent().set(&receipt_key, &record);
+        env.storage().persistent().set(&receipt_id_key, &route_id);
         bump_persistent(&env, &receipt_key);
+        bump_persistent(&env, &receipt_id_key);
         bump_instance(&env);
 
         registry_client.finalize_route(&route_id, &user, &status_code, &transaction_hash);

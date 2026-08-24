@@ -40,3 +40,10 @@
 - Consequences: `NETWORKS.md` must state that the local network smoke was unavailable rather than claiming it ran.
 - Revisit when: Docker or another local Quickstart runtime is installed.
 
+## 2026-08-24 — Classic payment references are user-attested
+
+- Context: Soroban contracts cannot query historical classic transactions by hash.
+- Decision: The browser waits for Horizon-confirmed payment inclusion before asking the same wallet to authorize a Settlement Receipt containing that transaction hash. The contract validates wallet ownership and finalizes both contract records atomically, but does not claim independent verification of the classic payment.
+- Why: Adding a trusted oracle or custodial server signer would violate the MVP's simplicity and wallet-authority boundary.
+- Consequences: UI and documentation call the hash a confirmed-by-client, user-attested reference. Verifiers should follow the public explorer link.
+- Revisit when: Settlement moves to an atomic SAC transfer or a governed attestation oracle is intentionally introduced.

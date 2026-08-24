@@ -57,6 +57,7 @@ pub enum RouteError {
     SettlementNotConfigured = 6,
     UserMismatch = 7,
     InvalidPage = 8,
+    SettlementAlreadyConfigured = 9,
 }
 
 #[contractevent]
@@ -102,6 +103,9 @@ impl RouteRegistry {
             .get(&DataKey::Admin)
             .expect("admin must exist");
         admin.require_auth();
+        if env.storage().instance().has(&DataKey::SettlementContract) {
+            panic_with_error!(&env, RouteError::SettlementAlreadyConfigured);
+        }
         env.storage()
             .instance()
             .set(&DataKey::SettlementContract, &settlement_contract);

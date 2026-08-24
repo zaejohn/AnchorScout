@@ -75,11 +75,54 @@
         {
           "function": {
             "contract_fn": {
+              "contract_address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAHK3M",
+              "function_name": "create_route",
+              "args": [
+                {
+                  "bytes": "0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f"
+                },
+                {
+                  "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFCT4"
+                },
+                {
+                  "string": "harbor-demo"
+                },
+                {
+                  "string": "XLM"
+                },
+                {
+                  "i128": "1000000"
+                },
+                {
+                  "string": "PHP"
+                },
+                {
+                  "i128": "5710000000"
+                },
+                {
+                  "i128": "10000"
+                },
+                {
+                  "bytes": "1010101010101010101010101010101010101010101010101010101010101010"
+                }
+              ]
+            }
+          },
+          "sub_invocations": []
+        }
+      ]
+    ],
+    [
+      [
+        "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFCT4",
+        {
+          "function": {
+            "contract_fn": {
               "contract_address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAITA4",
               "function_name": "record_outcome",
               "args": [
                 {
-                  "bytes": "0303030303030303030303030303030303030303030303030303030303030303"
+                  "bytes": "1111111111111111111111111111111111111111111111111111111111111111"
                 },
                 {
                   "bytes": "0101010101010101010101010101010101010101010101010101010101010101"
@@ -88,7 +131,7 @@
                   "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFCT4"
                 },
                 {
-                  "bytes": "0404040404040404040404040404040404040404040404040404040404040404"
+                  "bytes": "1212121212121212121212121212121212121212121212121212121212121212"
                 },
                 {
                   "u32": 1
@@ -100,7 +143,6 @@
         }
       ]
     ],
-    [],
     []
   ],
   "ledger": {
@@ -143,6 +185,26 @@
               "key": {
                 "ledger_key_nonce": {
                   "nonce": "1033654523790656264"
+                }
+              },
+              "durability": "temporary",
+              "val": "void"
+            }
+          },
+          "ext": "v0"
+        },
+        "live_until": 6311999
+      },
+      {
+        "entry": {
+          "last_modified_ledger_seq": 0,
+          "data": {
+            "contract_data": {
+              "ext": "v0",
+              "contract": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFCT4",
+              "key": {
+                "ledger_key_nonce": {
+                  "nonce": "4837995959683129791"
                 }
               },
               "durability": "temporary",
@@ -282,8 +344,134 @@
                       "symbol": "transaction_hash"
                     },
                     "val": {
-                      "bytes": "0404040404040404040404040404040404040404040404040404040404040404"
+                      "bytes": "1212121212121212121212121212121212121212121212121212121212121212"
                     }
+                  },
+                  {
+                    "key": {
+                      "symbol": "user"
+                    },
+                    "val": {
+                      "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFCT4"
+                    }
+                  }
+                ]
+              }
+            }
+          },
+          "ext": "v0"
+        },
+        "live_until": 2073600
+      },
+      {
+        "entry": {
+          "last_modified_ledger_seq": 0,
+          "data": {
+            "contract_data": {
+              "ext": "v0",
+              "contract": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAHK3M",
+              "key": {
+                "vec": [
+                  {
+                    "symbol": "Route"
+                  },
+                  {
+                    "bytes": "0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f"
+                  }
+                ]
+              },
+              "durability": "persistent",
+              "val": {
+                "map": [
+                  {
+                    "key": {
+                      "symbol": "anchor_id"
+                    },
+                    "val": {
+                      "string": "harbor-demo"
+                    }
+                  },
+                  {
+                    "key": {
+                      "symbol": "destination_amount"
+                    },
+                    "val": {
+                      "i128": "5710000000"
+                    }
+                  },
+                  {
+                    "key": {
+                      "symbol": "destination_currency"
+                    },
+                    "val": {
+                      "string": "PHP"
+                    }
+                  },
+                  {
+                    "key": {
+                      "symbol": "fee"
+                    },
+                    "val": {
+                      "i128": "10000"
+                    }
+                  },
+                  {
+                    "key": {
+                      "symbol": "quote_hash"
+                    },
+                    "val": {
+                      "bytes": "1010101010101010101010101010101010101010101010101010101010101010"
+                    }
+                  },
+                  {
+                    "key": {
+                      "symbol": "route_id"
+                    },
+                    "val": {
+                      "bytes": "0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f"
+                    }
+                  },
+                  {
+                    "key": {
+                      "symbol": "selected_at"
+                    },
+                    "val": {
+                      "u64": "1700000000"
+                    }
+                  },
+                  {
+                    "key": {
+                      "symbol": "source_amount"
+                    },
+                    "val": {
+                      "i128": "1000000"
+                    }
+                  },
+                  {
+                    "key": {
+                      "symbol": "source_asset"
+                    },
+                    "val": {
+                      "string": "XLM"
+                    }
+                  },
+                  {
+                    "key": {
+                      "symbol": "status"
+                    },
+                    "val": {
+                      "vec": [
+                        {
+                          "symbol": "Pending"
+                        }
+                      ]
+                    }
+                  },
+                  {
+                    "key": {
+                      "symbol": "transaction_hash"
+                    },
+                    "val": "void"
                   },
                   {
                     "key": {
@@ -341,6 +529,36 @@
               "key": {
                 "vec": [
                   {
+                    "symbol": "UserRoute"
+                  },
+                  {
+                    "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFCT4"
+                  },
+                  {
+                    "u32": 1
+                  }
+                ]
+              },
+              "durability": "persistent",
+              "val": {
+                "bytes": "0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f"
+              }
+            }
+          },
+          "ext": "v0"
+        },
+        "live_until": 2073600
+      },
+      {
+        "entry": {
+          "last_modified_ledger_seq": 0,
+          "data": {
+            "contract_data": {
+              "ext": "v0",
+              "contract": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAHK3M",
+              "key": {
+                "vec": [
+                  {
                     "symbol": "UserRouteCount"
                   },
                   {
@@ -350,7 +568,7 @@
               },
               "durability": "persistent",
               "val": {
-                "u32": 1
+                "u32": 2
               }
             }
           },
@@ -439,7 +657,7 @@
                       "symbol": "receipt_id"
                     },
                     "val": {
-                      "bytes": "0303030303030303030303030303030303030303030303030303030303030303"
+                      "bytes": "1111111111111111111111111111111111111111111111111111111111111111"
                     }
                   },
                   {
@@ -467,7 +685,7 @@
                       "symbol": "transaction_hash"
                     },
                     "val": {
-                      "bytes": "0404040404040404040404040404040404040404040404040404040404040404"
+                      "bytes": "1212121212121212121212121212121212121212121212121212121212121212"
                     }
                   },
                   {
@@ -499,7 +717,7 @@
                     "symbol": "ReceiptId"
                   },
                   {
-                    "bytes": "0303030303030303030303030303030303030303030303030303030303030303"
+                    "bytes": "1111111111111111111111111111111111111111111111111111111111111111"
                   }
                 ]
               },

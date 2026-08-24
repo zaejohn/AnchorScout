@@ -42,7 +42,7 @@ One provider failure or timeout is returned as provider health metadata and neve
 ### Route Registry
 
 - Constructor stores the administrator.
-- The administrator configures the Settlement Receipt contract address.
+- The administrator configures the Settlement Receipt contract address exactly once; it cannot be rotated through the public interface.
 - `create_route` requires the route user's authorization, rejects duplicate IDs and invalid values, persists one route per key, writes a paginated per-user index, and emits `route_selected`.
 - `finalize_route` requires authorization by the configured Settlement Receipt contract and only permits `Pending -> Completed|Failed`.
 - Durable records use persistent storage with bounded TTL extension; global configuration uses instance storage.
@@ -52,10 +52,11 @@ One provider failure or timeout is returned as provider health metadata and neve
 - Constructor stores the Route Registry address.
 - `record_outcome` requires the route user's authorization, verifies the route owner with the registry, prevents duplicate settlement, stores a durable receipt, and calls `RouteRegistry.finalize_route` in the same atomic transaction.
 - The nested call is the required inter-contract communication. Any failure rolls back both contracts.
+- The referenced classic transaction hash is user-attested. The application confirms it through Horizon before requesting the receipt signature, but the contract cannot inspect historical classic transactions. The receipt proves the user's attestation and atomic two-contract finalization, not independent payment verification.
 
 ## State invariants
 
-1. A route ID and settlement receipt are unique.
+1. Route IDs and receipt IDs are globally unique within their contracts.
 2. Only the route owner can create the route and authorize its settlement outcome.
 3. Only the configured Settlement Receipt contract can finalize a route.
 4. A route can transition exactly once from `Pending` to `Completed` or `Failed`.
@@ -63,6 +64,7 @@ One provider failure or timeout is returned as provider health metadata and neve
 6. Source and destination amounts are positive; fees are non-negative; stored text is non-empty and bounded.
 7. Quote selection requires complete comparison data and an unexpired `AVAILABLE` quote.
 8. Submitted transactions are not shown as confirmed until Horizon or RPC confirms them.
+9. A receipt's classic transaction hash is a wallet-authorized reference; clients must verify it with Horizon before presenting payment confirmation.
 
 ## Transaction lifecycle
 
@@ -87,4 +89,3 @@ The application polls RPC `getEvents` for both deployed contract IDs, overlaps t
 - Local contract tests and optimized WASM builds precede Testnet deployment.
 - Docker is not available in this workstation, so a local Quickstart network smoke test is recorded as unavailable; Testnet is the real network integration gate.
 - CI runs lint, typecheck, frontend tests, Next.js production build, Rust tests, and `stellar contract build`.
-

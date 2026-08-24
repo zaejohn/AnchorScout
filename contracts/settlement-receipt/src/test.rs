@@ -152,3 +152,80 @@ fn settlement_requires_user_auth_and_emits_cross_contract_events() {
     assert_eq!(fixture.env.auths()[0].0, fixture.user);
     assert_eq!(fixture.env.events().all().events().len(), 2);
 }
+
+#[test]
+fn receipt_ids_are_unique_across_routes() {
+    let fixture = setup();
+    fixture.route.create_route(
+        &id(&fixture.env, 15),
+        &fixture.user,
+        &String::from_str(&fixture.env, "harbor-demo"),
+        &String::from_str(&fixture.env, "XLM"),
+        &1_000_000,
+        &String::from_str(&fixture.env, "PHP"),
+        &5_710_000_000,
+        &10_000,
+        &id(&fixture.env, 16),
+    );
+    let receipt_id = id(&fixture.env, 17);
+    fixture.settlement.record_outcome(
+        &receipt_id,
+        &id(&fixture.env, 1),
+        &fixture.user,
+        &id(&fixture.env, 18),
+        &1,
+    );
+    assert_eq!(
+        fixture.settlement.try_record_outcome(
+            &receipt_id,
+            &id(&fixture.env, 15),
+            &fixture.user,
+            &id(&fixture.env, 19),
+            &1,
+        ),
+        Err(Ok(Error::from_contract_error(
+            SettlementError::DuplicateReceipt as u32
+        )))
+    );
+}
+
+#[test]
+fn nested_registry_failure_rolls_back_the_receipt() {
+    let fixture = setup();
+    fixture.route.finalize_route(
+        &id(&fixture.env, 1),
+        &fixture.user,
+        &1,
+        &id(&fixture.env, 20),
+    );
+    assert!(fixture
+        .settlement
+        .try_record_outcome(
+            &id(&fixture.env, 21),
+            &id(&fixture.env, 1),
+            &fixture.user,
+            &id(&fixture.env, 22),
+            &1,
+        )
+        .is_err());
+    assert!(fixture
+        .settlement
+        .try_get_receipt(&id(&fixture.env, 1))
+        .is_err());
+}
+
+#[test]
+fn settlement_fails_without_route_user_authorization() {
+    let fixture = setup();
+    fixture.env.set_auths(&[]);
+    assert!(fixture
+        .settlement
+        .try_record_outcome(
+            &id(&fixture.env, 23),
+            &id(&fixture.env, 1),
+            &fixture.user,
+            &id(&fixture.env, 24),
+            &1,
+        )
+        .is_err());
+}

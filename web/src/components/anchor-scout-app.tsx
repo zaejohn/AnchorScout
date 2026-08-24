@@ -222,11 +222,11 @@ export function AnchorScoutApp({ contractsConfigured }: { contractsConfigured: b
       <section className="action-grid">
         <article className="panel execute-panel">
           <div className="panel-heading"><div><span className="step">03</span><h2>Execute the proof</h2></div><span className="quiet">3 wallet signatures</span></div>
-          <ol className="flow-list"><li className={selected ? "active" : ""}><b>1</b><span><strong>Record route</strong><small>Route Registry contract</small></span></li><li><b>2</b><span><strong>Send 0.1 XLM</strong><small>Real Testnet payment proof</small></span></li><li><b>3</b><span><strong>Finalize receipt</strong><small>Cross-contract settlement</small></span></li></ol>
+          <ol className="flow-list"><li className={selected ? "active" : ""}><b>1</b><span><strong>Record route</strong><small>Route Registry contract</small></span></li><li><b>2</b><span><strong>Send 0.1 XLM</strong><small>Horizon-confirmed Testnet payment</small></span></li><li><b>3</b><span><strong>Attest receipt</strong><small>Wallet-authorized cross-contract result</small></span></li></ol>
           {!contractsConfigured && <div className="notice warning">Contract actions unlock after the Testnet deployment IDs are configured.</div>}
           <TransactionStatus update={execution} />
           <button className="button primary wide" disabled={!wallet || !selected || !contractsConfigured || !["idle", "failed", "rejected", "expired", "confirmed"].includes(execution.phase)} onClick={handleExecute}>{!wallet ? "Connect wallet to continue" : !selected ? "Choose a live route" : "Sign route and settle"}</button>
-          <p className="fine-print">The 0.1 XLM proof payment is separate from the indicative PHP quote. No real fiat payout occurs.</p>
+          <p className="fine-print">The 0.1 XLM payment is separate from the indicative PHP quote. Its hash is confirmed by the app through Horizon and then user-attested on-chain; the receipt contract cannot independently query classic transaction history. No real fiat payout occurs.</p>
         </article>
 
         <article className="panel utility-panel">

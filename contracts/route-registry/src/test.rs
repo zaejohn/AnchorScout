@@ -150,3 +150,32 @@ fn route_creation_fails_without_user_authorization() {
         )
         .is_err());
 }
+
+#[test]
+fn settlement_configuration_is_admin_only_and_one_shot() {
+    let env = Env::default();
+    let admin = Address::generate(&env);
+    let settlement = Address::generate(&env);
+    let contract_id = env.register(RouteRegistry, (admin,));
+    let client = RouteRegistryClient::new(&env, &contract_id);
+    assert!(client.try_configure_settlement(&settlement).is_err());
+
+    env.mock_all_auths();
+    client.configure_settlement(&settlement);
+    assert_eq!(
+        client.try_configure_settlement(&Address::generate(&env)),
+        Err(Ok(Error::from_contract_error(
+            RouteError::SettlementAlreadyConfigured as u32
+        )))
+    );
+}
+
+#[test]
+fn direct_finalization_fails_without_settlement_authorization() {
+    let (env, _admin, user, _settlement, client) = setup();
+    create(&client, &env, &user, 8);
+    env.set_auths(&[]);
+    assert!(client
+        .try_finalize_route(&id(&env, 8), &user, &1, &id(&env, 18))
+        .is_err());
+}
