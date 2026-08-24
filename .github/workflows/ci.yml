@@ -41,6 +41,5 @@ jobs:
         with:
           workspaces: contracts
       - run: cargo test --manifest-path contracts/Cargo.toml --locked
-      - run: cargo install --locked stellar-cli --version 27.0.0
+      - uses: stellar/stellar-cli@v27.0.0
       - run: stellar contract build --manifest-path contracts/Cargo.toml --out-dir contracts/wasm --locked
-
