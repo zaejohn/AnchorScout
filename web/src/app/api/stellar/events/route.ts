@@ -1,5 +1,4 @@
-import { NextResponse } from "next/server";
-
+import { noStoreJson } from "@/lib/server/responses";
 import {
   ROUTE_REGISTRY_CONTRACT_ID,
   SETTLEMENT_RECEIPT_CONTRACT_ID,
@@ -25,7 +24,7 @@ async function rpc<T>(method: string, params: Record<string, unknown>) {
 
 export async function GET(request: Request) {
   if (!hasContractDeployment()) {
-    return NextResponse.json({ events: [], configured: false, nextLedger: null });
+    return noStoreJson({ events: [], configured: false, nextLedger: null });
   }
   try {
     const latest = await rpc<{ sequence: number }>("getLatestLedger", {});
@@ -48,17 +47,13 @@ export async function GET(request: Request) {
       ],
       pagination: { limit: 100 },
     });
-    return NextResponse.json({
+    return noStoreJson({
       configured: true,
       events: result.events,
       nextLedger: latest.sequence + 1,
     });
   } catch (error) {
     console.error("contract_event_poll_failed", error);
-    return NextResponse.json(
-      { error: "Contract events are temporarily unavailable" },
-      { status: 503 },
-    );
+    return noStoreJson({ error: "Contract events are temporarily unavailable" }, 503);
   }
 }
-

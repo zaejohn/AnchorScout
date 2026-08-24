@@ -1,7 +1,6 @@
 import { Buffer } from "buffer";
 import { StrKey } from "@stellar/stellar-sdk";
-import { NextResponse } from "next/server";
-
+import { noStoreJson } from "@/lib/server/responses";
 import { hasContractDeployment } from "@/lib/stellar/config";
 import { getRouteReceipt, getWalletRoutes } from "@/lib/stellar/contracts";
 import { unitsToDecimal } from "@/lib/stellar/units";
@@ -14,10 +13,10 @@ export async function GET(
 ) {
   const { address } = await params;
   if (!StrKey.isValidEd25519PublicKey(address)) {
-    return NextResponse.json({ error: "Invalid Stellar address" }, { status: 400 });
+    return noStoreJson({ error: "Invalid Stellar address" }, 400);
   }
   if (!hasContractDeployment()) {
-    return NextResponse.json({ routes: [], configured: false });
+    return noStoreJson({ routes: [], configured: false });
   }
   try {
     const records = await getWalletRoutes(address);
@@ -46,12 +45,9 @@ export async function GET(
         };
       }),
     );
-    return NextResponse.json({ routes, configured: true });
+    return noStoreJson({ routes, configured: true });
   } catch (error) {
     console.error("contract_history_failed", error);
-    return NextResponse.json(
-      { error: "Contract history is temporarily unavailable" },
-      { status: 503 },
-    );
+    return noStoreJson({ error: "Contract history is temporarily unavailable" }, 503);
   }
 }

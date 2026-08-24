@@ -1,6 +1,5 @@
 import { StrKey } from "@stellar/stellar-sdk";
-import { NextResponse } from "next/server";
-
+import { noStoreJson } from "@/lib/server/responses";
 import { STELLAR_HORIZON_URL } from "@/lib/stellar/config";
 
 type HorizonBalance = {
@@ -16,7 +15,7 @@ export async function GET(
 ) {
   const { address } = await params;
   if (!StrKey.isValidEd25519PublicKey(address)) {
-    return NextResponse.json({ error: "Invalid Stellar address" }, { status: 400 });
+    return noStoreJson({ error: "Invalid Stellar address" }, 400);
   }
   try {
     const response = await fetch(`${STELLAR_HORIZON_URL}/accounts/${address}`, {
@@ -24,11 +23,11 @@ export async function GET(
       signal: AbortSignal.timeout(8_000),
     });
     if (response.status === 404) {
-      return NextResponse.json({ error: "Account is not funded on Testnet" }, { status: 404 });
+      return noStoreJson({ error: "Account is not funded on Testnet" }, 404);
     }
     if (!response.ok) throw new Error(`Horizon returned ${response.status}`);
     const account = (await response.json()) as { balances: HorizonBalance[]; sequence: string };
-    return NextResponse.json({
+    return noStoreJson({
       address,
       sequence: account.sequence,
       balances: account.balances.map((balance) => ({
@@ -39,7 +38,6 @@ export async function GET(
     });
   } catch (error) {
     console.error("horizon_account_lookup_failed", error);
-    return NextResponse.json({ error: "Horizon is temporarily unavailable" }, { status: 503 });
+    return noStoreJson({ error: "Horizon is temporarily unavailable" }, 503);
   }
 }
-
