@@ -1,91 +1,152 @@
-# Codex Stellar + Next.js Starter
+# AnchorScout
 
-A Codex-native operating system for **full-stack Stellar/Soroban applications using Next.js App Router, TypeScript, and Tailwind CSS**.
+AnchorScout is a non-custodial Stellar Testnet route-comparison dApp. It lets a user compare normalized Anchor-style quotes, select a live route, sign a real XLM payment, record the selection on Soroban, and finalize it through a second contract with public receipt evidence.
 
-The application stack is intentionally opinionated:
+The product solves a simple problem: payment routes expose different rates, fees, speed, and availability, but those differences are hard to compare consistently. AnchorScout isolates each provider behind one adapter interface, validates and normalizes responses server-side, and ranks only complete, live quotes.
 
-- Next.js App Router
-- TypeScript
-- Tailwind CSS
-- Next.js frontend + backend
-- pnpm by default
-- Stellar/Soroban when the product needs on-chain logic
+## Evidence at a glance
 
-Stellar versions/providers remain researched per project through Stellar's official AI resources rather than copied into stale repository instructions.
+![Desktop route comparison](docs/evidence/desktop-route-comparison.png)
 
-## What is included
+| Wallet selection | Mobile route comparison |
+| --- | --- |
+| ![Stellar Wallets Kit options](docs/evidence/wallet-options.png) | ![390 pixel mobile layout](docs/evidence/mobile-route-comparison.png) |
 
-- Hierarchical `AGENTS.md` rules for the repository, Next.js application, and Soroban contracts.
-- Project-specific Codex subagents with model routing.
-- Repo-local Codex skills for Next.js full-stack work, Stellar feature implementation, contract review, and verification.
-- Stellar Raven MCP + official Stellar Dev Skill setup.
-- `create-next-app@latest` scaffold scripts for a security-fresh `web/` application; generated version-matched Next.js agent guidance is preserved and extended with Stellar rules.
-- Local Quickstart workflow.
-- Testnet deployment discipline.
-- Product/architecture/tasks/decisions/network templates.
-- No Mainnet automation by default.
+The screenshots are from the locally running production-shaped application. Public Testnet transactions below provide the authoritative route/payment/receipt evidence. A connected extension wallet screenshot remains a physical-browser step because the available verification browser has no Stellar wallet installed.
 
-## Repository shape
+## How it works
+
+1. Connect Freighter, xBull, or LOBSTR through Stellar Wallets Kit on Testnet.
+2. Load XLM and configured asset balances from Horizon.
+3. Submit a validated route request to the Next.js backend.
+4. Query all providers concurrently; isolate timeouts and malformed responses.
+5. Normalize, expire, and deterministically rank valid quotes.
+6. Sign a Route Registry invocation with the user's wallet.
+7. Sign and confirm a real classic XLM payment.
+8. Sign a Settlement Receipt invocation. That contract atomically invokes Route Registry and finalizes the route.
+9. Poll contract events and reload durable contract-backed history.
+
+AnchorScout never holds funds, requests secret keys, or signs for users. Demo PHP quotes are indicative; no fiat payout occurs. The classic payment hash is confirmed through Horizon by the app and user-attested on-chain because Soroban cannot independently query classic transaction history.
+
+## Architecture
 
 ```text
-.
-├── AGENTS.md
-├── PROJECT.md
-├── ARCHITECTURE.md
-├── TASKS.md
-├── DECISIONS.md
-├── NETWORKS.md
-├── .codex/agents/
-├── .agents/skills/
-├── contracts/
-├── web/                 # created by scaffold-nextjs script
-├── scripts/
-└── docs/
+Browser wallet + responsive client
+        │
+        ├── Next.js Route Handlers ── provider registry ── SEP-1/SEP-38 or demo adapters
+        │                                  │
+        │                                  └── normalization + deterministic ranking
+        │
+        ├── Horizon ── balances, classic XLM submission, payment confirmation
+        │
+        └── Stellar RPC ── simulation, wallet signing, contract submission, events
+                                  │
+                    Route Registry contract
+                                  ▲
+                                  │ atomic authenticated invocation
+                    Settlement Receipt contract
 ```
 
-## Clone workflow
+- `web/src/lib/anchors/`: request schema, provider interface, adapters, normalization, ranking, and tests
+- `web/src/lib/stellar/`: Testnet config, Wallets Kit, classic payment lifecycle, generated-contract wrappers, and history synchronization
+- `web/src/app/api/`: quote, account, event, and history boundaries
+- `contracts/route-registry/`: wallet-owned route records and final-state transitions
+- `contracts/settlement-receipt/`: globally unique receipts and authenticated cross-contract finalization
+- `web/src/lib/stellar/generated/`: generated TypeScript bindings from deployed contract specs
 
-1. Clone/copy this starter into a new repository.
-2. Edit **`PROJECT.md` first**.
-3. Run `scripts/setup-codex-stellar.*`.
-4. Run `scripts/scaffold-nextjs.*`.
-5. Open Codex at the repository root.
-6. Follow `docs/FIRST-RUN.md`.
+See `ARCHITECTURE.md` for boundaries and invariants and `DECISIONS.md` for durable design choices.
 
-## Architecture philosophy
+## Setup
 
-**Next.js is the default full stack.** Do not add a separate backend service just to separate frontend/backend. Use Server Components, Server Actions, Route Handlers, and server-only domain modules according to the boundary.
+### Requirements
 
-**Main Codex = lead engineer.** Research, mapping, tests, and reviews are delegated to focused subagents so the main context is not filled with documentation dumps or build logs.
+- Node.js 22+
+- pnpm 11+
+- Rust 1.96+ with `wasm32v1-none`
+- Stellar CLI 27+
+- Docker only if local Quickstart RPC testing is desired
 
-**Stellar knowledge stays fresh.** Official Stellar Dev Skills and Raven provide current Stellar context instead of copying SDK docs into the repository.
+### Install and run
 
-**Server first.** Server Components are the default. Client Components are intentionally limited to interactivity, wallet/browser APIs, and client state.
+```powershell
+cd web
+Copy-Item .env.example .env.local
+pnpm install --frozen-lockfile
+pnpm dev
+```
 
-**Local first.** Contract/unit tests -> local Quickstart -> Testnet -> Mainnet only after explicit approval.
+Set these public Testnet values in `web/.env.local`:
 
-**Generated interfaces.** When contracts change, prefer generated TypeScript bindings rather than maintaining hand-written frontend contract ABIs/clients.
+```dotenv
+NEXT_PUBLIC_STELLAR_HORIZON_URL=https://horizon-testnet.stellar.org
+NEXT_PUBLIC_STELLAR_RPC_URL=https://soroban-testnet.stellar.org
+NEXT_PUBLIC_ROUTE_REGISTRY_CONTRACT_ID=CBYCCXCJLFQKUIPNJDQNXXIGV26S4FSXGHRYQQBPU3EYUGE6EXRRDZ5H
+NEXT_PUBLIC_SETTLEMENT_RECEIPT_CONTRACT_ID=CBQKALTRUEBNTDOKL7UOOSEFPJMHZRQCWV5C6VZA4T3TO4WEB2OIBDJM
+NEXT_PUBLIC_DEMO_PAYMENT_DESTINATION=GDW2INHQPIWK6JYMVDPCT3JZHMBSYPDEWB56PCRC2JSXADAF22VF253M
+```
 
-## Prerequisites
+Optional server-only `SEP38_ANCHOR_HOME_DOMAIN` and `SEP38_ANCHOR_NAME` enable a real indicative provider. The configured adapter discovers `ANCHOR_QUOTE_SERVER` through SEP-1 and never exposes server configuration to the browser.
 
-- Codex CLI / IDE
-- Git
-- Node.js meeting the current Next.js requirement
-- pnpm (or change the scaffold script)
-- Rust + `wasm32v1-none` for Soroban contract development
-- Stellar CLI
-- Docker for local Quickstart
+### Verification
 
-Use the setup/scaffold scripts and current official docs rather than assuming the version numbers in an old README are still correct.
+```powershell
+cd web
+pnpm lint
+pnpm typecheck
+pnpm test
+pnpm build
 
-## Official references
+cd ..\contracts
+cargo test --workspace --locked
+stellar contract build --optimize
+```
 
-- https://developers.stellar.org/docs/build/building-with-ai
-- https://developers.stellar.org/docs/build/smart-contracts/getting-started/setup
-- https://developers.stellar.org/docs/tools/quickstart/getting-started
-- https://nextjs.org/docs/app/getting-started/installation
-- https://nextjs.org/docs/app/api-reference/cli/create-next-app
-- https://tailwindcss.com/docs/installation/framework-guides/nextjs
-- https://developers.openai.com/codex/guides/agents-md
-- https://developers.openai.com/codex/subagents
-- https://developers.openai.com/codex/skills
+Verified release result:
+
+- ESLint: passed
+- TypeScript: passed
+- Frontend/domain tests: 11 passed
+- Next.js 16.3.2 production build: passed
+- Soroban tests: 16 passed
+- Optimized contract builds: passed
+- Contract specialist re-review: no release-blocking findings
+- Desktop and 390 px mobile browser checks: passed
+
+The same gates are encoded in `.github/workflows/ci.yml`. A remote GitHub run requires configuring and pushing a Git remote.
+
+### Deploy contracts to Testnet
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\deploy-testnet.ps1
+```
+
+The script retests and rebuilds exact optimized artifacts, creates/funds a secure-store deployer identity, deploys both contracts, configures the one-shot settlement authority, smoke-reads state, and regenerates TypeScript bindings. No secret is written to the repository.
+
+## Stellar Testnet
+
+| Item | Public identifier |
+| --- | --- |
+| Route Registry | [`CBYCCX…RDZ5H`](https://lab.stellar.org/r/testnet/contract/CBYCCXCJLFQKUIPNJDQNXXIGV26S4FSXGHRYQQBPU3EYUGE6EXRRDZ5H) |
+| Settlement Receipt | [`CBQKALT…IBDJM`](https://lab.stellar.org/r/testnet/contract/CBQKALTRUEBNTDOKL7UOOSEFPJMHZRQCWV5C6VZA4T3TO4WEB2OIBDJM) |
+| Route selection | [`c1875852…c1d2`](https://stellar.expert/explorer/testnet/tx/c18758523958bcb4738664364bbd401a8fe225f46f3b68efc324bbb4ad41c1d2) |
+| Confirmed 0.1 XLM payment | [`707e08de…b164`](https://stellar.expert/explorer/testnet/tx/707e08de52ba122c2d9ae992bf3a9c0d03b58f7d39ebd194f993ef3fe091b164) |
+| Receipt + cross-contract finalization | [`eefe216d…d93a`](https://stellar.expert/explorer/testnet/tx/eefe216d59c3a7123a1a59a18e5edd660478c2ab3becb0ec06e930657467d93a) |
+
+The final public reads return a `Completed` route and `Completed` receipt linked to the same payment hash. `NETWORKS.md` contains complete artifact hashes, deployment transactions, IDs, asset scope, and reset guidance.
+
+## Operational status
+
+- Mainnet is disabled and was not touched.
+- Native XLM is the executable Testnet asset. Test USDC is indicative until an issuer is configured.
+- Vercel Web Analytics is included in the root layout, with non-sensitive quote/route lifecycle events.
+- Production Vercel deployment is ready but requires `vercel login` or a deployment token; this workstation is logged out.
+- The in-app browser verified wallet discovery, route comparison, expiration countdowns, mobile responsiveness, and no horizontal overflow. Signing with a real extension wallet remains a human-controlled browser action.
+
+## Security notes
+
+- The browser is untrusted; route input is validated again at the server boundary.
+- Wallet signatures remain user-controlled.
+- Submission and confirmation are separate states.
+- Contract settlement authority is configured exactly once.
+- Receipt IDs are globally unique, and a failed nested Registry invocation rolls back Receipt storage atomically.
+- No bank, KYC, seed, private key, or sensitive payout data is stored or emitted.
