@@ -4,6 +4,7 @@ import type {
   RouteRequest,
 } from "../types";
 import { lookup } from "node:dns/promises";
+import { createHash } from "node:crypto";
 import { request as httpsRequest } from "node:https";
 import { BlockList, isIP } from "node:net";
 
@@ -173,18 +174,32 @@ export class Sep38IndicativeProvider implements AnchorProvider {
     return {
       anchorId: this.id,
       anchorName: this.name,
-      quoteId: `indicative_${this.id}_${Date.now()}`,
+      quoteId: `indicative_${createHash("sha256")
+        .update(`${this.id}:${request.sourceAsset}:${request.amount}:${request.payoutMethod}:${price.price}:${price.total_price}:${fee}`)
+        .digest("hex")
+        .slice(0, 32)}`,
       sourceAsset: request.sourceAsset,
       sourceAmount,
       destinationCurrency: request.destinationCurrency,
       destinationAmount: sourceAmount * totalPrice,
       exchangeRate: Number(price.price),
       fee,
+      feeCurrency: request.sourceAsset === "TEST_USDC" ? "USDC" : request.sourceAsset,
       payoutMethod: request.payoutMethod,
-      estimatedMinutes: 10,
-      expiresAt: new Date(Date.now() + 60_000).toISOString(),
+      estimatedMinutes: null,
+      estimatedSettlement: "Not supplied by the SEP-38 indicative price endpoint",
+      expiresAt: new Date(Date.now() + 30_000).toISOString(),
       available: true,
-      isDemo: false,
+      quoteKind: "INDICATIVE",
+      settlementMode: "COMPARISON_ONLY",
+      rateSource: "Provider SEP-38 /price response",
+      feeSource: "Provider SEP-38 /price response",
+      availabilitySource: "Live SEP-1 discovery and SEP-38 endpoint response",
+      providerUrl: this.homeDomain,
+      disclosures: [
+        "This is an indicative SEP-38 price, not an authenticated firm quote.",
+        "The provider did not supply a settlement estimate or executable payout instructions.",
+      ],
     };
   }
 }

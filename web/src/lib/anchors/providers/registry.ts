@@ -1,11 +1,15 @@
 import "server-only";
 
 import type { AnchorProvider } from "../types";
-import { demoProviders } from "./demo";
+import { CoinsPhMarketProvider } from "./coins-ph";
+import { MoneyGramTestnetProvider } from "./moneygram";
 import { Sep38IndicativeProvider } from "./sep38";
 
 export function configuredProviders(): AnchorProvider[] {
-  const providers = [...demoProviders];
+  const providers: AnchorProvider[] = [
+    new CoinsPhMarketProvider(),
+    new MoneyGramTestnetProvider(),
+  ];
   const homeDomain = process.env.SEP38_ANCHOR_HOME_DOMAIN;
   if (homeDomain) {
     providers.push(
@@ -18,4 +22,3 @@ export function configuredProviders(): AnchorProvider[] {
   }
   return providers;
 }
-

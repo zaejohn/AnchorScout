@@ -12,12 +12,25 @@ const rawQuoteSchema = z.object({
   destinationCurrency: z.literal("PHP"),
   destinationAmount: z.coerce.number().positive().finite(),
   exchangeRate: z.coerce.number().positive().finite(),
-  fee: z.coerce.number().min(0).finite(),
+  fee: z.union([z.null(), z.coerce.number().min(0).finite()]),
+  feeCurrency: z.string().trim().min(1).max(16).nullable(),
   payoutMethod: z.enum(["BANK", "GCASH"]),
-  estimatedMinutes: z.number().int().positive().max(1_440),
+  estimatedMinutes: z.number().int().positive().max(10_080).nullable(),
+  estimatedSettlement: z.string().trim().min(1).max(120),
   expiresAt: z.string().datetime({ offset: true }),
   available: z.boolean(),
-  isDemo: z.boolean(),
+  quoteKind: z.enum(["FIRM", "INDICATIVE", "MARKET_REFERENCE"]),
+  settlementMode: z.enum([
+    "PROVIDER_LIVE",
+    "PROVIDER_TEST",
+    "FIAT_SIMULATED",
+    "COMPARISON_ONLY",
+  ]),
+  rateSource: z.string().trim().min(1).max(160),
+  feeSource: z.string().trim().min(1).max(160),
+  availabilitySource: z.string().trim().min(1).max(160),
+  providerUrl: z.string().url(),
+  disclosures: z.array(z.string().trim().min(1).max(240)).max(8),
 });
 
 const decimal = (value: number, places = 7) =>
@@ -51,12 +64,21 @@ export function normalizeQuote(
     destinationCurrency: parsed.destinationCurrency,
     destinationAmount: decimal(parsed.destinationAmount, 2),
     exchangeRate: decimal(parsed.exchangeRate, 4),
-    fee: decimal(parsed.fee),
+    fee: parsed.fee === null ? null : decimal(parsed.fee),
+    feeCurrency: parsed.feeCurrency,
     payoutMethod: parsed.payoutMethod,
     estimatedMinutes: parsed.estimatedMinutes,
+    estimatedSettlement: parsed.estimatedSettlement,
     expiresAt: parsed.expiresAt,
     status: expired ? "EXPIRED" : parsed.available ? "AVAILABLE" : "UNAVAILABLE",
-    isDemo: parsed.isDemo,
+    quoteKind: parsed.quoteKind,
+    settlementMode: parsed.settlementMode,
+    rateSource: parsed.rateSource,
+    feeSource: parsed.feeSource,
+    availabilitySource: parsed.availabilitySource,
+    providerUrl: parsed.providerUrl,
+    disclosures: parsed.disclosures,
+    comparisonComplete:
+      parsed.fee !== null && parsed.estimatedMinutes !== null,
   };
 }
-

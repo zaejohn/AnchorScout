@@ -12,7 +12,7 @@ export const routeRequestSchema = z.object({
     .trim()
     .regex(/^\d+(?:\.\d{1,7})?$/, "Enter a valid amount with up to 7 decimals")
     .refine((value) => Number(value) > 0, "Amount must be greater than zero")
-    .refine((value) => Number(value) <= 10_000, "Demo amount cannot exceed 10,000"),
+    .refine((value) => Number(value) <= 10_000, "Amount cannot exceed 10,000"),
   sourceAsset: z.enum(SOURCE_ASSETS),
   destinationCurrency: z.enum(DESTINATION_CURRENCIES),
   payoutMethod: z.enum(PAYOUT_METHODS),
@@ -21,4 +21,3 @@ export const routeRequestSchema = z.object({
 export function parseRouteRequest(input: unknown) {
   return routeRequestSchema.safeParse(input);
 }
-

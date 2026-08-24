@@ -25,11 +25,19 @@ function raw(overrides: Partial<RawProviderQuote> = {}): RawProviderQuote {
     destinationAmount: "5700",
     exchangeRate: "57",
     fee: "0.2",
+    feeCurrency: "XLM",
     payoutMethod: "BANK",
     estimatedMinutes: 5,
+    estimatedSettlement: "About 5 minutes",
     expiresAt: "2026-08-24T00:05:00.000Z",
     available: true,
-    isDemo: true,
+    quoteKind: "FIRM",
+    settlementMode: "PROVIDER_TEST",
+    rateSource: "Test fixture",
+    feeSource: "Test fixture",
+    availabilitySource: "Test fixture",
+    providerUrl: "https://example.com/provider",
+    disclosures: [],
     ...overrides,
   };
 }
@@ -74,6 +82,19 @@ describe("deterministic ranking", () => {
     );
     expect(ranked.map((quote) => quote.anchorId)).toEqual(["c", "a", "b"]);
     expect(ranked[0]).toMatchObject({ rank: 1, best: true });
+  });
+
+  it("never marks an incomplete market reference as best", () => {
+    const ranked = rankQuotes(
+      [
+        normalizeQuote(
+          raw({ fee: null, feeCurrency: null, estimatedMinutes: null }),
+          now,
+        ),
+      ],
+      now,
+    );
+    expect(ranked[0]).toMatchObject({ rank: 1, best: false, comparisonComplete: false });
   });
 });
 

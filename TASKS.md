@@ -7,14 +7,16 @@
 - [x] Configure Next.js 16, TypeScript, Tailwind, dependencies, environment validation, tests, and GitHub Actions
 - [x] Add StellarWalletsKit multi-wallet selection for Freighter, xBull, and LOBSTR with Testnet enforcement and reconnect/disconnect handling
 - [x] Add XLM/asset balances, refresh/error states, and the reviewed classic XLM transaction lifecycle
-- [x] Add validated route requests, three demo adapters, configurable SEP-1/SEP-38 discovery, timeouts, failure isolation, normalization, expiration, and deterministic ranking
+- [x] Add validated route requests, configurable SEP-1/SEP-38 discovery, timeouts, failure isolation, normalization, expiration, and deterministic ranking
+- [x] Remove fictional default providers; integrate live Coins.ph market depth and MoneyGram Testnet capability; implement a protected-only authenticated Coins.ph adapter; label fiat-step simulation explicitly
+- [x] Add quote provenance, nullable missing fields, completeness-aware ranking, and provider-specific disclosures so incomplete data cannot receive a "Best" label
 - [x] Deliver the responsive route-comparison, execution, utility, and history UI with loading/error/not-found states
 - [x] Implement Route Registry and Settlement Receipt with authorization, bounded storage access, events, globally unique receipts, atomic cross-contract finalization, and negative tests
 - [x] Build optimized WASM and generate versioned TypeScript contract bindings
 - [x] Add wallet-signed route recording and settlement, contract-event polling/deduplication, and durable wallet-scoped history
 - [x] Add Vercel Web Analytics and non-sensitive product events
 - [x] Add repeatable PowerShell/Bash Testnet deployment scripts and GitHub Actions release gates
-- [x] Pass web lint, typecheck, 71 tests across 11 files, production build, 16 contract tests, and optimized contract builds
+- [x] Pass web lint, typecheck, 78 provider/domain tests across 12 files, production build, 16 contract tests, and optimized contract builds
 - [x] Complete specialist contract review and Testnet release re-review
 - [x] Deploy both contracts and complete a real route → 0.1 XLM → receipt/finalization flow on Testnet
 - [x] Verify the desktop and 390 px mobile route flow in-browser with no horizontal overflow

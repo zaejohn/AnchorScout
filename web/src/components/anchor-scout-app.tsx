@@ -7,7 +7,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { isSelectableQuote } from "@/lib/anchors/ranking";
 import type { AnchorQuote, ProviderResult, QuoteSearchResult, RouteRequest } from "@/lib/anchors/types";
 import { findConfirmedXlmTransaction, sendXlm, TerminalPaymentFailedError } from "@/lib/stellar/classic";
-import { DEMO_PAYMENT_DESTINATION, stellarExpertUrl } from "@/lib/stellar/config";
+import { PROOF_PAYMENT_DESTINATION, stellarExpertUrl } from "@/lib/stellar/config";
 import { createRoute, createRouteId, recordSettlement } from "@/lib/stellar/contracts";
 import { classifyWalletError, SubmittedTransactionPendingError, type TransactionUpdate } from "@/lib/stellar/errors";
 import { applyBroadcastUpdate, parseProofCheckpoint, resumableProofLabel, type ProofCheckpoint } from "@/lib/stellar/proof";
@@ -44,7 +44,7 @@ export function AnchorScoutApp({ contractsConfigured }: { contractsConfigured: b
   const [quoteBusy, setQuoteBusy] = useState(false);
   const [quoteError, setQuoteError] = useState("");
   const [selected, setSelected] = useState<AnchorQuote | null>(null);
-  const [execution, setExecution] = useState<TransactionUpdate>({ phase: "idle", message: "Select a live quote to start the on-chain route flow." });
+  const [execution, setExecution] = useState<TransactionUpdate>({ phase: "idle", message: "Select an externally sourced route to start the Testnet proof." });
   const [checkpoint, setCheckpoint] = useState<ProofCheckpoint | null>(null);
   const [history, setHistory] = useState<HistoryRoute[]>([]);
   const [historyBusy, setHistoryBusy] = useState(false);
@@ -111,8 +111,8 @@ export function AnchorScoutApp({ contractsConfigured }: { contractsConfigured: b
         localStorage.getItem(PROOF_CHECKPOINT_KEY),
         wallet.address,
       );
-      if (!restored) return;
       setCheckpoint(restored);
+      if (!restored) return;
       setExecution({
         phase: "pending",
         message: "Checking the saved proof before any transaction can be submitted again.",
@@ -271,7 +271,7 @@ export function AnchorScoutApp({ contractsConfigured }: { contractsConfigured: b
 
   const handleDisconnect = async () => {
     setWalletBusy(true); await disconnectWallet().catch(() => undefined);
-    setWallet(null); setBalances([]); setHistory([]);
+    setWallet(null); setBalances([]); setHistory([]); setSelected(null); setCheckpoint(null);
     setWalletMessage("Wallet disconnected. Your keys never left the wallet."); setWalletBusy(false);
   };
 
@@ -299,8 +299,14 @@ export function AnchorScoutApp({ contractsConfigured }: { contractsConfigured: b
   const handleExecute = async () => {
     if (executionLock.current) return;
     if (!wallet || (!selected && !checkpoint)) return;
+    if (!checkpoint && selected?.sourceAsset !== "XLM") {
+      return setExecution({
+        phase: "failed",
+        message: "Test USDC is comparison-only until a Testnet issuer and asset transfer are configured. Choose XLM to execute the proof.",
+      });
+    }
     if (!checkpoint && selected && !isSelectableQuote(selected, new Date())) return setExecution({ phase: "expired", message: "This quote expired. Refresh routes before signing." });
-    if (!contractsConfigured || !DEMO_PAYMENT_DESTINATION) return setExecution({ phase: "failed", message: "The public Testnet deployment is not configured in this build." });
+    if (!contractsConfigured || !PROOF_PAYMENT_DESTINATION) return setExecution({ phase: "failed", message: "The public Testnet proof deployment is not configured in this build." });
     executionLock.current = true;
     try {
       let progress = checkpoint?.walletAddress === wallet.address ? checkpoint : null;
@@ -414,8 +420,8 @@ export function AnchorScoutApp({ contractsConfigured }: { contractsConfigured: b
       if (!progress.paymentHash) {
         try {
           const payment = await sendXlm({
-            source: wallet.address, destination: DEMO_PAYMENT_DESTINATION, amount: "0.1", signTransaction: walletSigner(wallet.address),
-            onUpdate: (update) => updateProgress("payment", update, "Demo payment: "),
+            source: wallet.address, destination: PROOF_PAYMENT_DESTINATION, amount: "0.1", signTransaction: walletSigner(wallet.address),
+            onUpdate: (update) => updateProgress("payment", update, "Proof payment: "),
           });
           progress = { ...progress, paymentHash: payment.hash, paymentPending: false };
           persistCheckpoint(progress);
@@ -478,18 +484,18 @@ export function AnchorScoutApp({ contractsConfigured }: { contractsConfigured: b
       <section className="hero" id="top">
         <div className="eyebrow">Transparent routes. User-owned funds.</div>
         <h1>See more value before you <em>send.</em></h1>
-        <p>Compare normalized Stellar payment routes, understand every fee, and verify your demo settlement directly on Testnet.</p>
-        <div className="proof-row"><span>✓ Non-custodial</span><span>✓ Three comparable routes</span><span>✓ Contract-backed receipts</span></div>
+        <p>Compare live external payment data, see what each provider actually supplies, and verify a non-custodial proof directly on Testnet.</p>
+        <div className="proof-row"><span>✓ Non-custodial</span><span>✓ Real external data</span><span>✓ Contract-backed proofs</span></div>
       </section>
 
       <section className="workspace" aria-label="AnchorScout workspace">
         <article className="panel route-panel">
-          <div className="panel-heading"><div><span className="step">01</span><h2>Compare routes</h2></div><span className="quiet">Indicative demo quotes</span></div>
+          <div className="panel-heading"><div><span className="step">01</span><h2>Compare routes</h2></div><span className="quiet">Live external sources</span></div>
           <form className="route-form" onSubmit={handleQuoteSearch}>
             <label className="amount-field"><span>You send</span><div><input aria-label="Amount" inputMode="decimal" value={routeRequest.amount} onChange={(event) => setRouteRequest({ ...routeRequest, amount: event.target.value })} required /><select aria-label="Source asset" value={routeRequest.sourceAsset} onChange={(event) => setRouteRequest({ ...routeRequest, sourceAsset: event.target.value as RouteRequest["sourceAsset"] })}><option value="XLM">XLM</option><option value="TEST_USDC">Test USDC</option></select></div></label>
             <div className="field-pair">
               <label><span>You receive</span><select value={routeRequest.destinationCurrency} onChange={(event) => setRouteRequest({ ...routeRequest, destinationCurrency: event.target.value as "PHP" })}><option value="PHP">PHP — Philippine peso</option></select></label>
-              <label><span>Payout</span><select value={routeRequest.payoutMethod} onChange={(event) => setRouteRequest({ ...routeRequest, payoutMethod: event.target.value as RouteRequest["payoutMethod"] })}><option value="BANK">Bank transfer</option><option value="GCASH">GCash demo</option></select></label>
+              <label><span>Payout</span><select value={routeRequest.payoutMethod} onChange={(event) => setRouteRequest({ ...routeRequest, payoutMethod: event.target.value as RouteRequest["payoutMethod"] })}><option value="BANK">Bank transfer</option><option value="GCASH">GCash</option></select></label>
             </div>
             <button className="button primary wide" disabled={quoteBusy}>{quoteBusy ? "Checking providers…" : "Compare available routes"}</button>
           </form>
@@ -504,21 +510,32 @@ export function AnchorScoutApp({ contractsConfigured }: { contractsConfigured: b
       </section>
 
       {(quoteBusy || liveQuotes.length > 0) && <section className="results-section">
-        <div className="section-heading"><div><span className="step">02</span><h2>Ranked for your outcome</h2></div><p>Highest receive amount first, then fee and speed.</p></div>
-        <div className="quote-grid">{quoteBusy ? [1, 2, 3].map((item) => <div className="quote-card skeleton" key={item} />) : liveQuotes.map((quote) => {
-          const seconds = Math.max(0, Math.floor((Date.parse(quote.expiresAt) - clock) / 1000)); const selectable = isSelectableQuote(quote, new Date(clock));
-          return <article className={`quote-card ${selected?.quoteId === quote.quoteId ? "selected" : ""}`} key={quote.quoteId}><div className="quote-top"><span className="rank">#{quote.rank}</span>{quote.best && <span className="best">Best outcome</span>}<span className={`expiry ${!selectable ? "expired" : ""}`}>{selectable ? `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")} left` : "Expired"}</span></div><p className="anchor-name">{quote.anchorName} {quote.isDemo && <small>DEMO</small>}</p><strong className="receive">{peso.format(Number(quote.destinationAmount))}</strong><dl><div><dt>Rate</dt><dd>₱{quote.exchangeRate}</dd></div><div><dt>Fee</dt><dd>{quote.fee} {quote.sourceAsset === "TEST_USDC" ? "USDC" : quote.sourceAsset}</dd></div><div><dt>Estimate</dt><dd>~{quote.estimatedMinutes} min</dd></div></dl><button className="button secondary wide" disabled={!selectable || Boolean(checkpoint)} onClick={() => { setSelected(quote); setExecution({ phase: "idle", message: "Route selected. Review the Testnet proof flow below." }); }}>{checkpoint ? "Finish saved proof first" : selected?.quoteId === quote.quoteId ? "Selected ✓" : selectable ? "Choose this route" : "Refresh required"}</button></article>;
-        })}</div>
+        <div className="section-heading"><div><span className="step">02</span><h2>Externally sourced results</h2></div><p>“Best” appears only when fee and numeric timing data are both present.</p></div>
+        <div className="quote-grid">{quoteBusy ? [1, 2].map((item) => <div className="quote-card skeleton" key={item} />) : liveQuotes.map((quote) => (
+          <QuoteCard
+            key={quote.quoteId}
+            quote={quote}
+            clock={clock}
+            selected={selected?.quoteId === quote.quoteId}
+            checkpointActive={Boolean(checkpoint)}
+            onSelect={() => {
+              setSelected(quote);
+              setExecution({ phase: "idle", message: "Route selected. Review its disclosures and the separate Testnet proof below." });
+            }}
+          />
+        ))}</div>
       </section>}
 
       <section className="action-grid">
         <article className="panel execute-panel">
           <div className="panel-heading"><div><span className="step">03</span><h2>Execute the proof</h2></div><span className="quiet">3 wallet signatures</span></div>
           <ol className="flow-list"><li className={selected ? "active" : ""}><b>1</b><span><strong>Record route</strong><small>Route Registry contract</small></span></li><li><b>2</b><span><strong>Send 0.1 XLM</strong><small>Horizon-confirmed Testnet payment</small></span></li><li><b>3</b><span><strong>Attest receipt</strong><small>Wallet-authorized cross-contract result</small></span></li></ol>
+          {selected && <div className="notice warning">{selected.settlementMode === "FIAT_SIMULATED" ? "This route uses real external comparison data, but its bank/GCash payout is simulated on Testnet." : "This route is comparison-only; the Testnet proof does not execute the provider payout."}</div>}
+          {selected?.sourceAsset === "TEST_USDC" && <div className="notice warning">Test USDC execution is disabled until a Testnet issuer and asset-payment path are configured.</div>}
           {!contractsConfigured && <div className="notice warning">Contract actions unlock after the Testnet deployment IDs are configured.</div>}
           <TransactionStatus update={execution} />
-          <button className="button primary wide" disabled={!wallet || (!selected && !checkpoint) || !contractsConfigured || !["idle", "failed", "rejected", "expired", "confirmed"].includes(execution.phase)} onClick={handleExecute}>{!wallet ? "Connect wallet to continue" : checkpoint ? resumableProofLabel(checkpoint) : !selected ? "Choose a live route" : "Sign route and settle"}</button>
-          <p className="fine-print">The 0.1 XLM payment is separate from the indicative PHP quote. Its hash is confirmed by the app through Horizon and then user-attested on-chain; the receipt contract cannot independently query classic transaction history. No real fiat payout occurs.</p>
+          <button className="button primary wide" disabled={!wallet || (!selected && !checkpoint) || Boolean(selected && selected.sourceAsset !== "XLM" && !checkpoint) || !contractsConfigured || !["idle", "failed", "rejected", "expired", "confirmed"].includes(execution.phase)} onClick={handleExecute}>{!wallet ? "Connect wallet to continue" : checkpoint ? resumableProofLabel(checkpoint) : !selected ? "Choose a route" : selected.sourceAsset !== "XLM" ? "XLM required for Testnet proof" : "Sign Testnet route proof"}</button>
+          <p className="fine-print">The 0.1 XLM transfer proves the wallet and contract lifecycle only. It does not fund, accept, or execute the external quote. Its hash is Horizon-confirmed and user-attested on-chain; no real PHP payout occurs.</p>
         </article>
 
         <article className="panel utility-panel">
@@ -532,14 +549,67 @@ export function AnchorScoutApp({ contractsConfigured }: { contractsConfigured: b
         {!wallet ? <div className="history-empty">Connect a wallet to load its durable Route Registry records.</div> : historyBusy && history.length === 0 ? <div className="history-empty">Reading contract state…</div> : historyError ? <div className="notice error">{historyError}</div> : history.length === 0 ? <div className="history-empty">No routes recorded for this wallet yet.</div> : <div className="history-list">{history.map((route) => <article key={route.routeId}><div><span className={`status-dot ${route.status.toLowerCase()}`} /><strong>{route.anchorId}</strong><small>{new Date(route.selectedAt * 1000).toLocaleString()}</small></div><div><strong>{route.sourceAmount} {route.sourceAsset}</strong><span>→</span><strong>{peso.format(Number(route.destinationAmount))}</strong></div><div><span className={`status-badge ${route.status.toLowerCase()}`}>{route.status}</span>{route.routeTransactionHash && <a href={stellarExpertUrl("tx", route.routeTransactionHash)} target="_blank" rel="noreferrer">Route tx ↗</a>}{route.paymentHash && <a href={stellarExpertUrl("tx", route.paymentHash)} target="_blank" rel="noreferrer">Payment {short(route.paymentHash, 8)} ↗</a>}{route.receiptTransactionHash && <a href={stellarExpertUrl("tx", route.receiptTransactionHash)} target="_blank" rel="noreferrer">Receipt tx ↗</a>}<span title={route.receiptId ?? undefined}>{route.receiptId ? `Receipt ${short(route.receiptId, 8)}` : "Receipt pending"}</span></div></article>)}</div>}
       </section>
 
-      <footer><div className="brand"><span className="brand-mark">A</span><span>AnchorScout</span></div><p>Testnet comparison infrastructure. Not a production payout service.</p><a href="https://github.com/stellar" target="_blank" rel="noreferrer">Built on Stellar ↗</a></footer>
+      <footer><div className="brand"><span className="brand-mark">A</span><span>AnchorScout</span></div><p>Real provider data, Testnet proof settlement. Not a production payout service.</p><a href="https://github.com/stellar" target="_blank" rel="noreferrer">Built on Stellar ↗</a></footer>
     </main>
+  );
+}
+
+function QuoteCard({
+  quote,
+  clock,
+  selected,
+  checkpointActive,
+  onSelect,
+}: {
+  quote: AnchorQuote;
+  clock: number;
+  selected: boolean;
+  checkpointActive: boolean;
+  onSelect: () => void;
+}) {
+  const seconds = Math.max(0, Math.floor((Date.parse(quote.expiresAt) - clock) / 1000));
+  const selectable = isSelectableQuote(quote, new Date(clock));
+  const feeLabel = quote.fee === null
+    ? "Not supplied"
+    : `${quote.fee} ${quote.feeCurrency ?? ""}`.trim();
+  const kindLabel = quote.quoteKind.replaceAll("_", " ").toLowerCase();
+  return (
+    <article className={`quote-card ${selected ? "selected" : ""}`}>
+      <div className="quote-top">
+        <span className="rank">#{quote.rank}</span>
+        {quote.best && <span className="best">Best complete outcome</span>}
+        <span className={`expiry ${!selectable ? "expired" : ""}`}>
+          {selectable ? `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")} left` : "Refresh required"}
+        </span>
+      </div>
+      <p className="anchor-name">
+        <a href={quote.providerUrl} target="_blank" rel="noreferrer">{quote.anchorName} ↗</a>
+        <small>{kindLabel}</small>
+      </p>
+      <strong className="receive">{peso.format(Number(quote.destinationAmount))}</strong>
+      <span className="amount-qualifier">{quote.fee === null ? "gross reference; payout fee not deducted" : "after reported payout fee"}</span>
+      <dl>
+        <div><dt>Rate</dt><dd>₱{quote.exchangeRate}</dd></div>
+        <div><dt>Fee</dt><dd>{feeLabel}</dd></div>
+        <div><dt>Estimate</dt><dd>{quote.estimatedMinutes ? `~${quote.estimatedMinutes} min` : "Provider flow"}</dd></div>
+      </dl>
+      <div className="quote-evidence">
+        <p><b>Rate:</b> {quote.rateSource}</p>
+        <p><b>Fee:</b> {quote.feeSource}</p>
+        <p><b>Availability:</b> {quote.availabilitySource}</p>
+        <p><b>Settlement:</b> {quote.estimatedSettlement}</p>
+        {quote.disclosures.map((disclosure) => <p key={disclosure}>• {disclosure}</p>)}
+      </div>
+      <button className="button secondary wide" disabled={!selectable || checkpointActive} onClick={onSelect}>
+        {checkpointActive ? "Finish saved proof first" : selected ? "Selected ✓" : selectable ? "Choose this route" : "Refresh required"}
+      </button>
+    </article>
   );
 }
 
 function ProviderHealth({ providers }: { providers: ProviderResult[] }) {
   const healthy = providers.filter((provider) => provider.status === "ok").length;
-  return <div className="provider-health"><span><b>{healthy}/{providers.length}</b> providers responded</span>{providers.map((provider) => <span className={provider.status} key={provider.providerId} title={provider.message}>{provider.providerName}</span>)}</div>;
+  return <div className="provider-health"><span><b>{healthy}/{providers.length}</b> sources returned usable data</span>{providers.map((provider) => <span className={provider.status} key={provider.providerId} title={provider.message}>{provider.providerName}{provider.status === "unsupported" ? " · not compatible" : ""}</span>)}</div>;
 }
 
 function TransactionStatus({ update }: { update: TransactionUpdate }) {

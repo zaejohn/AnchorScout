@@ -61,21 +61,27 @@ export async function searchQuotes(
   options: { timeoutMs?: number; now?: Date } = {},
 ): Promise<QuoteSearchResult> {
   const now = options.now ?? new Date();
-  const timeoutMs = options.timeoutMs ?? 2_000;
+  const timeoutMs = options.timeoutMs ?? 5_000;
   const settled = await Promise.allSettled(
-    providers.map(async (provider) => ({
-      provider,
-      quote: assertQuoteMatchesRequest(
-        normalizeQuote(
-          await withTimeout(
-            (signal) => provider.getQuote(request, signal),
-            timeoutMs,
-          ),
-          now,
-        ),
-        request,
-      ),
-    })),
+    providers.map(async (provider) => {
+      const unsupported = provider.supports ? !provider.supports(request) : false;
+      return {
+        provider,
+        unsupported,
+        quote: unsupported
+          ? null
+          : assertQuoteMatchesRequest(
+              normalizeQuote(
+                await withTimeout(
+                  (signal) => provider.getQuote(request, signal),
+                  timeoutMs,
+                ),
+                now,
+              ),
+              request,
+            ),
+      };
+    }),
   );
 
   const quotes: AnchorQuote[] = [];
@@ -83,6 +89,15 @@ export async function searchQuotes(
   settled.forEach((result, index) => {
     const provider = providers[index];
     if (result.status === "fulfilled") {
+      if (result.value.unsupported || !result.value.quote) {
+        providerResults.push({
+          providerId: provider.id,
+          providerName: provider.name,
+          status: "unsupported",
+          message: "Provider does not support this asset and payout combination",
+        });
+        return;
+      }
       quotes.push(result.value.quote);
       providerResults.push({
         providerId: provider.id,

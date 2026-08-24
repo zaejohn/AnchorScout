@@ -2,9 +2,9 @@
 
 [![AnchorScout CI](https://github.com/zaejohn/AnchorScout/actions/workflows/ci.yml/badge.svg)](https://github.com/zaejohn/AnchorScout/actions/workflows/ci.yml)
 
-AnchorScout is a non-custodial Stellar Testnet route-comparison dApp. It lets a user compare normalized Anchor-style quotes, select a live route, sign a real XLM payment, record the selection on Soroban, and finalize it through a second contract with public receipt evidence.
+AnchorScout is a non-custodial Stellar Testnet route-comparison dApp. It compares normalized external provider data, distinguishes firm quotes from market references, records a selected route on Soroban, and completes a separate real XLM proof flow with public receipt evidence.
 
-The product solves a simple problem: payment routes expose different rates, fees, speed, and availability, but those differences are hard to compare consistently. AnchorScout isolates each provider behind one adapter interface, validates and normalizes responses server-side, and ranks only complete, live quotes.
+The product solves a simple problem: payment routes expose different rates, fees, speed, and availability, but those differences are hard to compare consistently. AnchorScout isolates each provider behind one adapter interface, validates and normalizes responses server-side, and never invents a missing fee, settlement time, or provider capability. Incomplete routes remain visible and attributed but cannot receive a "Best" badge.
 
 ## Evidence at a glance
 
@@ -21,21 +21,21 @@ The screenshots are from the locally running production-shaped application. Publ
 1. Connect Freighter, xBull, or LOBSTR through Stellar Wallets Kit on Testnet.
 2. Load XLM and configured asset balances from Horizon.
 3. Submit a validated route request to the Next.js backend.
-4. Query all providers concurrently; isolate timeouts and malformed responses.
-5. Normalize, expire, and deterministically rank valid quotes.
+4. Query Coins.ph live market data, MoneyGram Testnet capability, and any configured SEP-38 endpoint concurrently.
+5. Normalize provenance, missing fields, expiry, settlement mode, and deterministic ranking.
 6. Sign a Route Registry invocation with the user's wallet.
 7. Sign and confirm a real classic XLM payment.
 8. Sign a Settlement Receipt invocation. That contract atomically invokes Route Registry and finalizes the route.
 9. Poll contract events and reload durable contract-backed history.
 
-AnchorScout never holds funds, requests secret keys, or signs for users. Demo PHP quotes are indicative; no fiat payout occurs. The classic payment hash is confirmed through Horizon by the app and user-attested on-chain because Soroban cannot independently query classic transaction history.
+AnchorScout never holds funds, requests secret keys, accepts a production provider quote, or signs for users. The external PHP payout remains simulated on Testnet and is explicitly separate from the 0.1 XLM proof payment. The classic payment hash is confirmed through Horizon by the app and user-attested on-chain because Soroban cannot independently query classic transaction history.
 
 ## Architecture
 
 ```text
 Browser wallet + responsive client
         │
-        ├── Next.js Route Handlers ── provider registry ── SEP-1/SEP-38 or demo adapters
+        ├── Next.js Route Handlers ── provider registry ── Coins.ph / MoneyGram / SEP-38
         │                                  │
         │                                  └── normalization + deterministic ranking
         │
@@ -84,10 +84,26 @@ NEXT_PUBLIC_STELLAR_HORIZON_URL=https://horizon-testnet.stellar.org
 NEXT_PUBLIC_STELLAR_RPC_URL=https://soroban-testnet.stellar.org
 NEXT_PUBLIC_ROUTE_REGISTRY_CONTRACT_ID=CBYCCXCJLFQKUIPNJDQNXXIGV26S4FSXGHRYQQBPU3EYUGE6EXRRDZ5H
 NEXT_PUBLIC_SETTLEMENT_RECEIPT_CONTRACT_ID=CBQKALTRUEBNTDOKL7UOOSEFPJMHZRQCWV5C6VZA4T3TO4WEB2OIBDJM
-NEXT_PUBLIC_DEMO_PAYMENT_DESTINATION=GDW2INHQPIWK6JYMVDPCT3JZHMBSYPDEWB56PCRC2JSXADAF22VF253M
+NEXT_PUBLIC_PROOF_PAYMENT_DESTINATION=GDW2INHQPIWK6JYMVDPCT3JZHMBSYPDEWB56PCRC2JSXADAF22VF253M
 ```
 
-Optional server-only `SEP38_ANCHOR_HOME_DOMAIN` and `SEP38_ANCHOR_NAME` enable a real indicative provider. The adapter discovers `ANCHOR_QUOTE_SERVER` through SEP-1, requires HTTPS, and only calls the home origin or origins explicitly listed in `SEP38_ALLOWED_QUOTE_ORIGINS`. Server configuration is never exposed to the browser.
+No provider credential is required for live Coins.ph `XLMPHP`/`USDCPHP` market-reference results or MoneyGram Testnet capability checks. The public market adapter values the requested amount against the bid-side order book, so visible-depth slippage is included.
+
+The repository includes a tested authenticated Coins.ph adapter that requests a firm Convert quote and live `support-channel` fee, status, limits, and eligible rail. It is intentionally not registered on the anonymous public quote endpoint. A production deployment must first add user or tenant authorization, durable rate limiting, and narrowly scoped business credentials; server-only keys alone do not make a public proxy safe. The adapter never accepts the quote or calls cash-out.
+
+Optional `SEP38_ANCHOR_HOME_DOMAIN` and `SEP38_ANCHOR_NAME` enable a real indicative SEP-38 provider. The adapter discovers `ANCHOR_QUOTE_SERVER` through SEP-1, requires HTTPS, and only calls the home origin or origins explicitly listed in `SEP38_ALLOWED_QUOTE_ORIGINS`.
+
+## Provider and test-environment status
+
+| Provider | Data used now | Test environment | AnchorScout behavior |
+| --- | --- | --- | --- |
+| Coins.ph | Live public market status and bid depth; protected authenticated adapter implemented but not publicly registered | No public end-to-end Stellar/fiat sandbox documented | Production data is read-only; fiat execution is simulated on Testnet |
+| MoneyGram Ramps | Live Testnet SEP-1 and SEP-24 USDC capability/limits | Yes: Stellar Testnet anchor | Hosted cash is real Testnet capability; requested bank/GCash step is simulated and PHP rate is separately attributed to Coins.ph |
+| Configured SEP-38 anchor | Live SEP-1 discovery and `/price` response | Provider-specific | Indicative, comparison-only unless the provider supplies a compatible endpoint |
+| Onramper | Not enabled | Staging exists, but current probes returned no Stellar-to-PHP sell provider | Excluded until authenticated coverage proves the corridor |
+| TransFi | Not enabled | Credentialed sandbox exists | Excluded until capability APIs prove Stellar XLM/USDC-to-PHP coverage |
+
+Primary sources: [Coins.ph REST API](https://docs.coins.ph/rest-api/), [Coins.ph Business](https://www.coins.ph/en-ph/business), [MoneyGram Stellar integration](https://xramps.moneygram.com/ops/dev/stellar), [Onramper sell quotes](https://docs.onramper.com/reference/get_quotes-crypto-fiat), and [TransFi exchange rates](https://docs.transfi.com/reference/get-exchange-rates).
 
 ### Verification
 
@@ -107,7 +123,7 @@ Verified release result:
 
 - ESLint: passed
 - TypeScript: passed
-- Frontend/domain tests: 71 passed across 11 files
+- Frontend/domain tests: 78 passed across 12 files
 - Next.js 16.3.2 production build: passed
 - Soroban tests: 16 passed
 - Optimized contract builds: passed
@@ -139,7 +155,7 @@ The final public reads return a `Completed` route and `Completed` receipt linked
 ## Operational status
 
 - Mainnet is disabled and was not touched.
-- Native XLM is the executable Testnet asset. Test USDC is indicative until an issuer is configured.
+- Native XLM is the executable Testnet proof asset. Test USDC comparison is enabled, but execution remains disabled until an issuer and asset-payment path are configured.
 - Vercel Web Analytics is included in the root layout, with non-sensitive quote/route lifecycle events.
 - `/api/health` probes Horizon, RPC, protocol/ledger visibility, and public contract configuration for deployment monitoring.
 - Production Vercel deployment is ready but requires `vercel login` or a deployment token; this workstation is logged out.

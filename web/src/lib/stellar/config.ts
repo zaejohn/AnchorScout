@@ -12,8 +12,10 @@ export const ROUTE_REGISTRY_CONTRACT_ID =
   process.env.NEXT_PUBLIC_ROUTE_REGISTRY_CONTRACT_ID ?? "";
 export const SETTLEMENT_RECEIPT_CONTRACT_ID =
   process.env.NEXT_PUBLIC_SETTLEMENT_RECEIPT_CONTRACT_ID ?? "";
-export const DEMO_PAYMENT_DESTINATION =
-  process.env.NEXT_PUBLIC_DEMO_PAYMENT_DESTINATION ?? "";
+export const PROOF_PAYMENT_DESTINATION =
+  process.env.NEXT_PUBLIC_PROOF_PAYMENT_DESTINATION ??
+  process.env.NEXT_PUBLIC_DEMO_PAYMENT_DESTINATION ??
+  "";
 export const TESTNET_USDC_ISSUER =
   process.env.NEXT_PUBLIC_TESTNET_USDC_ISSUER ?? "";
 
@@ -36,6 +38,6 @@ export function hasValidContractDeployment(routeId: string, settlementId: string
 export function hasExecutableDeployment() {
   return (
     hasContractDeployment() &&
-    StrKey.isValidEd25519PublicKey(DEMO_PAYMENT_DESTINATION)
+    StrKey.isValidEd25519PublicKey(PROOF_PAYMENT_DESTINATION)
   );
 }

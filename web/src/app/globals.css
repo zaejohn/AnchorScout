@@ -64,11 +64,12 @@ input:focus,select:focus { border-color:var(--green-2); box-shadow:0 0 0 3px rgb
 .provider-health { display:flex; align-items:center; flex-wrap:wrap; gap:6px; margin-top:16px; color:var(--muted); font-size:10px; }
 .provider-health>span { border-radius:99px; background:#edf1e9; padding:5px 8px; }
 .provider-health .ok::before { content:"• "; color:#24845d; }
+.provider-health .unsupported::before { content:"• "; color:#9a741d; }
 .provider-health .failed::before,.provider-health .timed_out::before { content:"• "; color:var(--red); }
 .results-section,.history-section { width:min(1180px,calc(100% - 40px)); margin:80px auto 0; }
 .section-heading { margin-bottom:22px; }
 .section-heading p { margin:4px 0 0; color:var(--muted); font-size:12px; }
-.quote-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:16px; }
+.quote-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:16px; }
 .quote-card { min-height:300px; padding:22px; border:1px solid var(--line); border-radius:18px; background:var(--card); transition:border .2s,transform .2s; }
 .quote-card:hover { transform:translateY(-2px); }
 .quote-card.selected { border:2px solid var(--green-2); padding:21px; box-shadow:var(--shadow); }
@@ -78,13 +79,18 @@ input:focus,select:focus { border-color:var(--green-2); box-shadow:0 0 0 3px rgb
 .expiry { margin-left:auto; color:var(--green-2); font:700 10px var(--font-geist-mono),monospace; }
 .expiry.expired { color:var(--red); }
 .anchor-name { margin:22px 0 3px; font-size:13px; font-weight:800; }
+.anchor-name a { text-decoration-thickness:1px; text-underline-offset:3px; }
 .anchor-name small { margin-left:4px; color:var(--muted); font-size:8px; letter-spacing:.1em; }
 .receive { display:block; font-size:32px; letter-spacing:-.045em; }
+.amount-qualifier { display:block; margin-top:3px; color:var(--muted); font-size:9px; }
 .quote-card dl { display:grid; grid-template-columns:repeat(3,1fr); margin:24px 0; padding:16px 0; border-block:1px solid var(--line); }
 .quote-card dl div { text-align:center; border-right:1px solid var(--line); }
 .quote-card dl div:last-child { border:0; }
 .quote-card dt { color:var(--muted); font-size:9px; text-transform:uppercase; letter-spacing:.08em; }
 .quote-card dd { margin:5px 0 0; font-size:11px; font-weight:800; }
+.quote-evidence { min-height:152px; margin:-6px 0 18px; color:var(--muted); font-size:10px; line-height:1.45; }
+.quote-evidence p { margin:5px 0; }
+.quote-evidence b { color:var(--ink); }
 .skeleton { background:linear-gradient(90deg,#f7f7f2 20%,#ecefe7 40%,#f7f7f2 60%); background-size:200% 100%; animation:shimmer 1.4s infinite; }
 @keyframes shimmer { to { background-position:-200% 0; } }
 .action-grid { margin-top:80px; grid-template-columns:1.15fr .85fr; align-items:start; }

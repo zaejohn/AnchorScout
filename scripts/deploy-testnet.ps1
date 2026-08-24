@@ -67,8 +67,7 @@ try {
   Write-Host "Deployer: $Admin"
   Write-Host "Route Registry: $RouteId"
   Write-Host "Settlement Receipt: $SettlementId"
-  Write-Host "NEXT_PUBLIC_DEMO_PAYMENT_DESTINATION=$Admin"
+  Write-Host "NEXT_PUBLIC_PROOF_PAYMENT_DESTINATION=$Admin"
 } finally {
   Pop-Location
 }
-

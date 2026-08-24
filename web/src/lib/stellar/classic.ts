@@ -47,6 +47,24 @@ export function validateXlmTransferInput(destination: string, amount: string) {
   return amountStroops;
 }
 
+export function parseVerifiedSignedTransaction(
+  unsignedTxXdr: string,
+  signedTxXdr: string,
+) {
+  const unsigned = TransactionBuilder.fromXDR(
+    unsignedTxXdr,
+    STELLAR_NETWORK_PASSPHRASE,
+  );
+  const signed = TransactionBuilder.fromXDR(
+    signedTxXdr,
+    STELLAR_NETWORK_PASSPHRASE,
+  );
+  if (!signed.hash().equals(unsigned.hash())) {
+    throw new Error("Wallet returned a different transaction than requested");
+  }
+  return signed;
+}
+
 export async function findConfirmedXlmTransaction(hash: string) {
   const response = await fetch(`${STELLAR_HORIZON_URL}/transactions/${hash}`, {
     cache: "no-store",
@@ -90,15 +108,16 @@ export async function sendXlm(params: {
       .build();
 
     onUpdate({ phase: "awaiting_signature", message: "Review the XLM transfer in your wallet." });
-    const { signedTxXdr } = await signTransaction(transaction.toXDR(), {
+    const unsignedTxXdr = transaction.toXDR();
+    const { signedTxXdr } = await signTransaction(unsignedTxXdr, {
       networkPassphrase: STELLAR_NETWORK_PASSPHRASE,
       address: source,
     });
-    onUpdate({ phase: "signed", message: "Signed. Submitting to Stellar Testnet…" });
-    const signed = TransactionBuilder.fromXDR(
+    const signed = parseVerifiedSignedTransaction(
+      unsignedTxXdr,
       signedTxXdr,
-      STELLAR_NETWORK_PASSPHRASE,
     );
+    onUpdate({ phase: "signed", message: "Signed transaction verified. Submitting to Stellar Testnet…" });
     const paymentHash = signed.hash().toString("hex");
     onUpdate({ phase: "submitting", message: "Submitting transaction…", hash: paymentHash });
     let result: { hash: string; ledger: number };

@@ -15,7 +15,7 @@ Never store secret keys or seed phrases here.
 - RPC: `https://soroban-testnet.stellar.org`
 - Horizon: `https://horizon-testnet.stellar.org`
 - Deployer: `GDYALR5PTXKKGC4IWWVDWUCO6S6DRPUERJMZF2RNTK4ULCOBWZP5DXZU`
-- Demo payment destination: `GDW2INHQPIWK6JYMVDPCT3JZHMBSYPDEWB56PCRC2JSXADAF22VF253M`
+- Testnet proof payment destination: `GDW2INHQPIWK6JYMVDPCT3JZHMBSYPDEWB56PCRC2JSXADAF22VF253M`
 - Route Registry: `CBYCCXCJLFQKUIPNJDQNXXIGV26S4FSXGHRYQQBPU3EYUGE6EXRRDZ5H`
 - Settlement Receipt: `CBQKALTRUEBNTDOKL7UOOSEFPJMHZRQCWV5C6VZA4T3TO4WEB2OIBDJM`
 
@@ -47,9 +47,11 @@ Never store secret keys or seed phrases here.
 
 ### Assets
 
-- Native XLM is the executable demo asset.
+- Native XLM is the executable Testnet proof asset.
 - `Test USDC` remains an indicative quote input only. No issuer is configured and the application does not represent it as a transferable asset.
-- No production USDC, PHP settlement, bank payout, or liquidity is used.
+- Coins.ph `XLMPHP`/`USDCPHP` values are production market references fetched server-side; no production asset is transferred and no quote is accepted.
+- MoneyGram capability is read from its public Stellar Testnet SEP-1/SEP-24 endpoints. Its hosted cash route does not provide PHP bank/GCash settlement, so that external fiat step is simulated and clearly labeled.
+- No production USDC, PHP settlement, bank payout, GCash payout, KYC session, or provider liquidity is executed.
 
 Testnet is reset periodically. Re-run `scripts/deploy-testnet.ps1` and update this file if these entries are no longer available.
 

@@ -24,5 +24,4 @@ stellar contract invoke --id "$route_id" --source-account "$identity" --network 
 stellar contract bindings typescript --network testnet --contract-id "$route_id" --output-dir web/src/lib/stellar/generated/route-registry --overwrite
 stellar contract bindings typescript --network testnet --contract-id "$settlement_id" --output-dir web/src/lib/stellar/generated/settlement-receipt --overwrite
 
-printf 'Testnet deployment completed. Public values:\nDeployer: %s\nRoute Registry: %s\nSettlement Receipt: %s\nNEXT_PUBLIC_DEMO_PAYMENT_DESTINATION=%s\n' "$admin" "$route_id" "$settlement_id" "$admin"
-
+printf 'Testnet deployment completed. Public values:\nDeployer: %s\nRoute Registry: %s\nSettlement Receipt: %s\nNEXT_PUBLIC_PROOF_PAYMENT_DESTINATION=%s\n' "$admin" "$route_id" "$settlement_id" "$admin"

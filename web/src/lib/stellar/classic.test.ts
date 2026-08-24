@@ -1,6 +1,11 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { Account, Asset, BASE_FEE, Networks, Operation, TransactionBuilder } from "@stellar/stellar-sdk";
 
-import { findConfirmedXlmTransaction, validateXlmTransferInput } from "./classic";
+import {
+  findConfirmedXlmTransaction,
+  parseVerifiedSignedTransaction,
+  validateXlmTransferInput,
+} from "./classic";
 
 const DESTINATION = "GDW2INHQPIWK6JYMVDPCT3JZHMBSYPDEWB56PCRC2JSXADAF22VF253M";
 
@@ -26,6 +31,35 @@ describe("XLM transfer preflight", () => {
       );
     },
   );
+});
+
+describe("wallet-signed transaction integrity", () => {
+  const build = (amount: string) =>
+    new TransactionBuilder(new Account(DESTINATION, "1"), {
+      fee: BASE_FEE,
+      networkPassphrase: Networks.TESTNET,
+    })
+      .addOperation(
+        Operation.payment({
+          destination: DESTINATION,
+          asset: Asset.native(),
+          amount,
+        }),
+      )
+      .setTimeout(180)
+      .build()
+      .toXDR();
+
+  it("accepts the exact transaction body returned by the wallet", () => {
+    const xdr = build("0.1");
+    expect(parseVerifiedSignedTransaction(xdr, xdr).hash()).toBeDefined();
+  });
+
+  it("rejects a wallet-returned transaction with changed payment terms", () => {
+    expect(() => parseVerifiedSignedTransaction(build("0.1"), build("1"))).toThrow(
+      /different transaction/,
+    );
+  });
 });
 
 describe("ambiguous XLM submission reconciliation", () => {

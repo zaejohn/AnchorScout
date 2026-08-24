@@ -8,13 +8,13 @@
 - Consequences: History reads use contract simulation and cap each page at 20 records.
 - Revisit when: Traffic or history depth justifies a dedicated indexer.
 
-## 2026-08-24 — Use reliable demo routes by default
+## 2026-08-24 — Use attributed external data; never invent provider completeness
 
-- Context: Public Testnet SEP-38/PHP payout providers are not reliable enough to be a hard application dependency.
-- Decision: Ship three clearly labeled demo adapters behind the production provider interface, plus one configurable server-only SEP-1/SEP-38 adapter.
-- Why: The MVP demonstrates normalization, ranking, expiry, isolation, and selection without making fake production-liquidity claims.
-- Consequences: Demo settlement is real Testnet Stellar activity, not a real PHP payout.
-- Revisit when: A partner supplies a Testnet SEP-38 endpoint and its authentication requirements.
+- Context: Coins.ph has live PHP markets and authenticated business quote/payout APIs, while MoneyGram has a real Stellar Testnet SEP-24 cash environment. Neither supplies a public, complete Stellar Testnet bank/GCash quote.
+- Decision: Remove all three invented route adapters. Use Coins.ph public order-book depth as an explicitly gross market reference. Keep the authenticated firm rate/fee/status adapter off the anonymous endpoint until user authorization and durable abuse controls exist. Combine MoneyGram Testnet capability with a separately attributed external rate only when the unavailable bank/GCash step is unmistakably simulated.
+- Why: The comparison remains useful and live without presenting hardcoded rates, fees, settlement times, or fictional companies as providers.
+- Consequences: Fee and numeric ETA may be absent. Incomplete routes are shown with evidence but never receive a "Best" badge. Production quote acceptance, deposits, KYC, conversions, and fiat payouts are never initiated from this Testnet app.
+- Revisit when: A provider supplies an end-to-end sandbox for Stellar-to-PHP bank/GCash settlement or production scope is explicitly authorized.
 
 ## 2026-08-24 — User-authorized two-transaction settlement
 

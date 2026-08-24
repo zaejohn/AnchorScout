@@ -28,14 +28,18 @@ Settlement Receipt contract --finalize_route--> Route Registry contract
 - A focused Client Component owns wallet selection, balance refresh, forms, countdowns, signatures, transaction lifecycle, event polling, and user feedback.
 - `POST /api/quotes` validates untrusted input, runs providers concurrently with per-provider timeouts, normalizes responses, filters expired/malformed quotes, and ranks deterministically.
 - `GET /api/stellar/account/:address` reads public Testnet balances from Horizon.
-- Provider implementations are server-only. Demo adapters use the same interface as a configurable SEP-38 adapter and are labeled as demos in every response.
+- Provider implementations and credentials are server-only. The browser receives normalized, attributed provider evidence and never calls privileged provider APIs directly.
 - Contract bindings are generated from built WASM into `web/src/lib/stellar/generated/` and wrapped by small browser adapters.
 
 ## Anchor provider strategy
 
-The default registry contains three deterministic Testnet/demo providers. This makes route comparison reliable without pretending that production PHP payout liquidity exists. A configurable SEP-38 provider can be enabled by server-only environment variables and discovers `ANCHOR_QUOTE_SERVER` through SEP-1 over HTTPS.
+The default registry contains no invented providers. It calls the public Coins.ph exchange API for live `XLMPHP` or `USDCPHP` trading status and bid-side order-book depth, then values the requested amount against visible liquidity. This is labeled `MARKET_REFERENCE`; its gross PHP result never claims that a Convert quote, payout fee, or bank/GCash settlement is available.
 
-One provider failure or timeout is returned as provider health metadata and never cancels successful quotes. Firm authenticated SEP-38 quotes, SEP-24 deposit flows, SEP-31 cross-border payments, real bank payouts, and KYC are explicitly outside this MVP.
+An authenticated Coins.ph adapter is implemented and tested for a future protected deployment. It requests a firm Convert quote and combines it with account-scoped `support-channel` fee, limit, status, and rail data without accepting the quote or initiating cash-out. It is deliberately not registered on the public `/api/quotes` endpoint: exposing a business TRADE key through an anonymous proxy would leak account-scoped availability and permit quota abuse. Activating it requires a real user/tenant authorization boundary and durable rate limiting.
+
+MoneyGram's real Testnet SEP-1 and SEP-24 endpoints are checked for Testnet USDC capability and limits. MoneyGram exposes a hosted cash route rather than PHP bank/GCash or SEP-38 pricing, so the composite card attributes its PHP rate to Coins.ph and marks only the unsupported fiat payout as simulated. A configurable generic SEP-38 provider remains available through server-only environment variables.
+
+Every normalized quote carries `quoteKind`, `settlementMode`, rate/fee/availability sources, provider URL, and disclosures. Missing fee or numeric timing stays nullable; such a route can be inspected and selected for the separate Testnet proof but can never be labeled "Best." One provider failure, unsupported corridor, or timeout is health metadata and never cancels other results.
 
 ## Contracts
 
@@ -62,7 +66,7 @@ One provider failure or timeout is returned as provider health metadata and neve
 4. A route can transition exactly once from `Pending` to `Completed` or `Failed`.
 5. A receipt's user must equal the stored route owner.
 6. Source and destination amounts are positive; fees are non-negative; stored text is non-empty and bounded.
-7. Quote selection requires complete comparison data and an unexpired `AVAILABLE` quote.
+7. Quote selection requires an unexpired `AVAILABLE` quote. A "Best" label additionally requires complete fee and numeric timing data.
 8. Submitted transactions are not shown as confirmed until Horizon or RPC confirms them.
 9. A receipt's classic transaction hash is a wallet-authorized reference; clients must verify it with Horizon before presenting payment confirmation.
 
@@ -78,13 +82,13 @@ The application polls RPC `getEvents` for both deployed contract IDs, overlaps t
 
 - The browser is untrusted and receives only public Testnet URLs, passphrase, asset metadata, and contract IDs.
 - Wallet secret material never enters application code or server routes.
-- Anchor URLs and timeouts are server configuration; responses are validated before reaching the UI.
+- Anchor URLs, provider credentials, request signing, and timeouts are server-only; responses are schema-validated before reaching the UI.
 - Testnet deployment identities remain in Stellar CLI's local key store and are never committed.
 - Mainnet configuration and deployment are intentionally absent.
 
 ## Testing and promotion
 
-- Vitest covers request validation, normalization, ranking, expiration, provider failure isolation, and transaction-state error mapping.
+- Vitest covers request validation, normalization, incomplete-data ranking, expiration, live-depth math, authenticated request handling, MoneyGram capability composition, provider failure isolation, and transaction-state error mapping.
 - Rust tests cover authorization requirements, route creation, duplicates, invalid input/state, settlement success/failure, receipt uniqueness, events, and cross-contract finalization.
 - Local contract tests and optimized WASM builds precede Testnet deployment.
 - Docker is not available in this workstation, so a local Quickstart network smoke test is recorded as unavailable; Testnet is the real network integration gate.

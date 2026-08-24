@@ -70,7 +70,11 @@ export async function createRoute(params: {
     source_amount: decimalToUnits(quote.sourceAmount, 7),
     destination_currency: quote.destinationCurrency,
     destination_amount: decimalToUnits(quote.destinationAmount, 2),
-    fee: decimalToUnits(quote.fee, 7),
+    // The current contract ABI has no nullable fee. Zero is an explicit
+    // sentinel for externally sourced quotes whose fee is only disclosed in
+    // the provider's authenticated payout flow; the quote hash still commits
+    // to the nullable normalized value shown to the user.
+    fee: decimalToUnits(quote.fee ?? "0", 7),
     quote_hash: quoteHash,
   });
   onUpdate({ phase: "awaiting_signature", message: "Authorize route selection in your wallet." });
