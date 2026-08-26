@@ -162,7 +162,7 @@ The final public reads return a `Completed` route and `Completed` receipt linked
 ## Operational status
 
 - Mainnet is disabled and was not touched.
-- Native XLM is the executable Testnet proof asset. Test USDC comparison is enabled, but execution remains disabled until an issuer and asset-payment path are configured.
+- Native XLM is the separate 0.1 XLM proof asset for XLM and Test USDC comparisons; it does not execute a quoted USDC or fiat payout. The optional automated validator acquires real Circle Testnet USDC through live Stellar path payments before comparing routes.
 - Vercel Web Analytics is included in the root layout, with non-sensitive quote/route lifecycle events.
 - `/api/health` probes Horizon, RPC, protocol/ledger visibility, and public contract configuration for deployment monitoring.
 - Production Vercel deployment is ready but requires `vercel login` or a deployment token; this workstation is logged out.
@@ -176,4 +176,8 @@ The final public reads return a `Completed` route and `Completed` receipt linked
 - Configured SEP-38 HTTPS origins are resolved, public-address validated, DNS-pinned per request, response-bounded, and forbidden from redirecting.
 - Contract settlement authority is configured exactly once.
 - Receipt IDs are globally unique, and a failed nested Registry invocation rolls back Receipt storage atomically.
-- No bank, KYC, seed, private key, or sensitive payout data is stored or emitted.
+- No bank, KYC or real-user private key is stored or emitted. The opt-in validator stores supplied feedback profiles privately in Postgres and derives only its own Testnet wallets from a server-only master.
+
+## Automated Testnet user simulation
+
+See [SIMULATION.md](SIMULATION.md) for the durable 37-minute scheduler, database setup, required secrets, cron-job.org headers, real validation command, exact form fields, and safe recovery. The endpoint is `POST /api/cron/simulate`; no Vercel Cron is used. These are synthetic test runs, not independent human adoption metrics.

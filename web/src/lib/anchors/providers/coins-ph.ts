@@ -201,6 +201,7 @@ export class CoinsPhMarketProvider implements AnchorProvider {
       availabilitySource: `Live ${market.symbol} trading status and order-book liquidity`,
       providerUrl: "https://www.coins.ph/en-ph/business",
       disclosures: [
+        "This is a gross market reference, not a guaranteed net payout; fees and settlement timing require the provider's authenticated flow.",
         ...(request.sourceAsset === "TEST_USDC"
           ? ["The USDC/PHP market is production data."]
           : []),

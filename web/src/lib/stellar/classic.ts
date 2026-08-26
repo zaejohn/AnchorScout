@@ -78,6 +78,21 @@ export async function findConfirmedXlmTransaction(hash: string) {
     : ({ status: "failed", transaction } as const);
 }
 
+// Shared by the interactive wallet flow and the durable Testnet worker.
+// Preparation never submits: callers must sign and persist/review first.
+export async function prepareXlmTransaction(source: string, destination: string, amount: string) {
+  const amountStroops = validateXlmTransferInput(destination, amount);
+  const server = new Horizon.Server(STELLAR_HORIZON_URL);
+  const account = await server.loadAccount(source);
+  const native = account.balances.find((balance) => balance.asset_type === "native");
+  const availableStroops = native ? decimalToUnits(native.balance, 7) : 0n;
+  if (availableStroops <= amountStroops + BigInt(BASE_FEE)) throw new Error("Insufficient XLM balance");
+  return new TransactionBuilder(account, { fee: BASE_FEE, networkPassphrase: STELLAR_NETWORK_PASSPHRASE })
+    .addOperation(Operation.payment({ destination, asset: Asset.native(), amount }))
+    .setTimeout(180)
+    .build();
+}
+
 export async function sendXlm(params: {
   source: string;
   destination: string;
@@ -88,24 +103,8 @@ export async function sendXlm(params: {
   const { source, destination, amount, signTransaction, onUpdate } = params;
   try {
     onUpdate({ phase: "preparing", message: "Checking account and balance…" });
-    const amountStroops = validateXlmTransferInput(destination, amount);
-
     const server = new Horizon.Server(STELLAR_HORIZON_URL);
-    const account = await server.loadAccount(source);
-    const native = account.balances.find((balance) => balance.asset_type === "native");
-    const availableStroops = native ? decimalToUnits(native.balance, 7) : 0n;
-    if (availableStroops <= amountStroops + BigInt(BASE_FEE)) {
-      throw new Error("Insufficient XLM balance");
-    }
-    const transaction = new TransactionBuilder(account, {
-      fee: BASE_FEE,
-      networkPassphrase: STELLAR_NETWORK_PASSPHRASE,
-    })
-      .addOperation(
-        Operation.payment({ destination, asset: Asset.native(), amount }),
-      )
-      .setTimeout(180)
-      .build();
+    const transaction = await prepareXlmTransaction(source, destination, amount);
 
     onUpdate({ phase: "awaiting_signature", message: "Review the XLM transfer in your wallet." });
     const unsignedTxXdr = transaction.toXDR();

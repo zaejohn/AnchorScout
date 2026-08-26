@@ -22,8 +22,14 @@
 - [x] Verify the desktop and 390 px mobile route flow in-browser with no horizontal overflow
 - [x] Add the public responsive landing page at `/` and preserve the complete route-comparison workflow at `/app`
 - [x] Record public network evidence and maintain 20 meaningful implementation commits before final documentation
+- [x] Add authenticated cron-job.org endpoint, durable Postgres 37-minute scheduler, fenced leases, permanently reserved private profiles, resumable signed transaction checkpoints, retries and safe Google Form submission
+- [x] Reuse shared provider/transaction code for real Friendbot, USDC trustline/live swap, route selection, XLM proof and atomic settlement; keep unavailable fiat settlement explicitly simulated
+- [x] Pass lint, TypeScript, 208 web tests, production build and specialist app review; verify the production-built comparison UI and unauthorized cron rejection
+- [x] Complete one real 1,685-USDC Testnet simulation through confirmed Google Form submission, verify app history, and verify persisted interval gating after process restart; export its consumed profile reservation for hosted import
 
 ## Human-controlled completion gates
+
+- [ ] Configure managed Postgres and cron-job.org secrets; seed private profiles and import any local validation reservations before enabling hosted simulation.
 
 - [ ] Connect a real browser wallet extension and capture connected-wallet, balance, rejection, and wallet-signed success screenshots. The available in-app browser has no installed Stellar wallet.
 - [ ] Authenticate Vercel and deploy the production application. `vercel whoami` reports logged out; the CLI's anonymous temporary flow also failed before upload.

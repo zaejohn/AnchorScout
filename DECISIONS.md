@@ -55,3 +55,11 @@
 - Why: Adding a trusted oracle or custodial server signer would violate the MVP's simplicity and wallet-authority boundary.
 - Consequences: UI and documentation call the hash a confirmed-by-client, user-attested reference. Verifiers should follow the public explorer link.
 - Revisit when: Settlement moves to an atomic SAC transfer or a governed attestation oracle is intentionally introduced.
+
+## 2026-08-26 — Durable, opt-in synthetic Testnet worker
+
+- Context: The user explicitly requested automated new-wallet tests, real USDC swaps, reusable app flow, 37-minute cron gating and one-time feedback profiles. This supersedes the earlier no-database decision for this feature only.
+- Decision: Add server-only Postgres scheduling/profile reservation/checkpoints, fenced leases, HMAC-derived disposable Testnet wallets, and shared transaction preparation. No real-user secret is accepted. Existing browser wallets retain signature authority.
+- Decision: Use current strict-receive XLM→official Circle Testnet USDC liquidity; do not automate Circle's CAPTCHA faucet or invent providers. Execute the same explicit 0.1 XLM proof for USDC comparisons; unavailable external fiat settlement stays disclosed as simulated.
+- Decision: Signed envelopes are durable before broadcast. Only confirmed chain states advance. Google Form POST ambiguity blocks rather than risking duplicate feedback; synthetic responses must not be represented as human adoption.
+- Consequences: DATABASE_URL and server-only cron/wallet secrets are required for deployment. Local PGlite is a validation harness only, with reservations exported/imported before hosted scheduling. No Vercel Cron, custom token, contract ABI change, or Mainnet operation is introduced.

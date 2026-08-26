@@ -4,7 +4,7 @@
 
 AnchorScout is a hybrid Next.js dApp. Next.js 16 App Router provides the public UI and server-side Anchor aggregation. User-controlled wallets sign every payment and contract transaction. Two protocol-27 Stellar contracts own route and settlement state on Testnet.
 
-No database, separate backend, custody layer, or production-fiat system is required for the MVP.
+The interactive MVP remains wallet-controlled and stateless off-chain. The opt-in Testnet simulation adds Postgres persistence for profiles, run checkpoints, scheduling and leases; it does not add production fiat execution or custody of real-user wallets.
 
 ```text
 Browser wallet + interactive UI
@@ -82,7 +82,7 @@ The application polls RPC `getEvents` for both deployed contract IDs, overlaps t
 ## Environment and trust boundaries
 
 - The browser is untrusted and receives only public Testnet URLs, passphrase, asset metadata, and contract IDs.
-- Wallet secret material never enters application code or server routes.
+- Real-user wallet secret material never enters application code or server routes. The authenticated simulation worker derives only its own disposable Testnet keys from a server-only master and run UUID; no seed is stored in the database or returned by an endpoint.
 - Anchor URLs, provider credentials, request signing, and timeouts are server-only; responses are schema-validated before reaching the UI.
 - Testnet deployment identities remain in Stellar CLI's local key store and are never committed.
 - Mainnet configuration and deployment are intentionally absent.

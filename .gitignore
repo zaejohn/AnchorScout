@@ -11,6 +11,8 @@ contracts/wasm/
 !.env.example
 *.pem
 *.key
+web/names_emails_feedback.json
+web/.simulation/
 
 # Tooling and editor state
 .vercel/

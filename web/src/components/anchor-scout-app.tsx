@@ -300,12 +300,6 @@ export function AnchorScoutApp({ contractsConfigured }: { contractsConfigured: b
   const handleExecute = async () => {
     if (executionLock.current) return;
     if (!wallet || (!selected && !checkpoint)) return;
-    if (!checkpoint && selected?.sourceAsset !== "XLM") {
-      return setExecution({
-        phase: "failed",
-        message: "Test USDC is comparison-only until a Testnet issuer and asset transfer are configured. Choose XLM to execute the proof.",
-      });
-    }
     if (!checkpoint && selected && !isSelectableQuote(selected, new Date())) return setExecution({ phase: "expired", message: "This quote expired. Refresh routes before signing." });
     if (!contractsConfigured || !PROOF_PAYMENT_DESTINATION) return setExecution({ phase: "failed", message: "The public Testnet proof deployment is not configured in this build." });
     executionLock.current = true;
@@ -340,6 +334,7 @@ export function AnchorScoutApp({ contractsConfigured }: { contractsConfigured: b
         try {
           await recordSettlement({
             address: wallet.address,
+            signTransaction: walletSigner(wallet.address),
             routeId,
             paymentHash,
             succeeded: false,
@@ -377,6 +372,7 @@ export function AnchorScoutApp({ contractsConfigured }: { contractsConfigured: b
         try {
           const route = await createRoute({
             address: wallet.address,
+            signTransaction: walletSigner(wallet.address),
             quote: selected,
             routeId,
             onUpdate: (update) => updateProgress("route", update),
@@ -444,6 +440,7 @@ export function AnchorScoutApp({ contractsConfigured }: { contractsConfigured: b
       try {
         await recordSettlement({
           address: wallet.address,
+          signTransaction: walletSigner(wallet.address),
           routeId,
           paymentHash: confirmedPaymentHash,
           succeeded: true,
@@ -532,10 +529,10 @@ export function AnchorScoutApp({ contractsConfigured }: { contractsConfigured: b
           <div className="panel-heading"><div><span className="step">03</span><h2>Execute the proof</h2></div><span className="quiet">3 wallet signatures</span></div>
           <ol className="flow-list"><li className={selected ? "active" : ""}><b>1</b><span><strong>Record route</strong><small>Route Registry contract</small></span></li><li><b>2</b><span><strong>Send 0.1 XLM</strong><small>Horizon-confirmed Testnet payment</small></span></li><li><b>3</b><span><strong>Attest receipt</strong><small>Wallet-authorized cross-contract result</small></span></li></ol>
           {selected && <div className="notice warning">{selected.settlementMode === "FIAT_SIMULATED" ? "This route uses real external comparison data, but its bank/GCash payout is simulated on Testnet." : "This route is comparison-only; the Testnet proof does not execute the provider payout."}</div>}
-          {selected?.sourceAsset === "TEST_USDC" && <div className="notice warning">Test USDC execution is disabled until a Testnet issuer and asset-payment path are configured.</div>}
+          {selected?.sourceAsset === "TEST_USDC" && <div className="notice warning">This records your Test USDC comparison and sends a separate 0.1 XLM Testnet proof. It does not transfer the quoted USDC amount or pay out fiat.</div>}
           {!contractsConfigured && <div className="notice warning">Contract actions unlock after the Testnet deployment IDs are configured.</div>}
           <TransactionStatus update={execution} />
-          <button className="button primary wide" disabled={!wallet || (!selected && !checkpoint) || Boolean(selected && selected.sourceAsset !== "XLM" && !checkpoint) || !contractsConfigured || !["idle", "failed", "rejected", "expired", "confirmed"].includes(execution.phase)} onClick={handleExecute}>{!wallet ? "Connect wallet to continue" : checkpoint ? resumableProofLabel(checkpoint) : !selected ? "Choose a route" : selected.sourceAsset !== "XLM" ? "XLM required for Testnet proof" : "Sign Testnet route proof"}</button>
+          <button className="button primary wide" disabled={!wallet || (!selected && !checkpoint) || !contractsConfigured || !["idle", "failed", "rejected", "expired", "confirmed"].includes(execution.phase)} onClick={handleExecute}>{!wallet ? "Connect wallet to continue" : checkpoint ? resumableProofLabel(checkpoint) : !selected ? "Choose a route" : "Sign Testnet route proof"}</button>
           <p className="fine-print">The 0.1 XLM transfer proves the wallet and contract lifecycle only. It does not fund, accept, or execute the external quote. Its hash is Horizon-confirmed and user-attested on-chain; no real PHP payout occurs.</p>
         </article>
 

@@ -1,4 +1,5 @@
 import { Buffer } from "buffer";
+import type { SignTransaction } from "@stellar/stellar-sdk/contract";
 
 import { Client as RouteRegistryClient } from "./generated/route-registry/src";
 import type { RouteRecord } from "./generated/route-registry/src";
@@ -13,8 +14,8 @@ import {
 } from "./config";
 import { SubmittedTransactionPendingError, type TransactionUpdate } from "./errors";
 import { decimalToUnits } from "./units";
-import { walletSigner } from "./wallet";
 import type { AnchorQuote } from "../anchors/types";
+import { isSelectableQuote } from "../anchors/ranking";
 
 export const createRouteId = () =>
   Buffer.from(crypto.getRandomValues(new Uint8Array(32)));
@@ -24,6 +25,12 @@ const randomId = createRouteId;
 async function sha256(value: string) {
   const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value));
   return Buffer.from(digest);
+}
+
+export function hashRouteQuote(quote: AnchorQuote) {
+  return sha256(JSON.stringify({ anchorId: quote.anchorId, quoteId: quote.quoteId,
+    sourceAmount: quote.sourceAmount, destinationAmount: quote.destinationAmount,
+    fee: quote.fee, expiresAt: quote.expiresAt }));
 }
 
 function baseClientOptions(address?: string) {
@@ -37,32 +44,22 @@ function baseClientOptions(address?: string) {
   };
 }
 
-export async function createRoute(params: {
+export async function prepareRouteTransaction(params: {
   address: string;
   quote: AnchorQuote;
-  routeId?: Buffer;
-  onUpdate: (update: TransactionUpdate) => void;
+  routeId: Buffer;
+  signTransaction?: SignTransaction;
 }) {
-  const { address, quote, onUpdate } = params;
-  const routeId = params.routeId ?? randomId();
-  const quoteHash = await sha256(
-    JSON.stringify({
-      anchorId: quote.anchorId,
-      quoteId: quote.quoteId,
-      sourceAmount: quote.sourceAmount,
-      destinationAmount: quote.destinationAmount,
-      fee: quote.fee,
-      expiresAt: quote.expiresAt,
-    }),
-  );
+  const { address, quote, routeId } = params;
+  if (!isSelectableQuote(quote, new Date())) throw new Error("Route quote expired or unavailable");
+  const quoteHash = await hashRouteQuote(quote);
   const client = new RouteRegistryClient({
     ...baseClientOptions(address),
     contractId: ROUTE_REGISTRY_CONTRACT_ID,
-    signTransaction: walletSigner(address),
+    signTransaction: params.signTransaction,
   });
 
-  onUpdate({ phase: "simulating", message: "Simulating route selection…" });
-  const transaction = await client.create_route({
+  return client.create_route({
     route_id: routeId,
     user: address,
     anchor_id: quote.anchorId,
@@ -77,6 +74,20 @@ export async function createRoute(params: {
     fee: decimalToUnits(quote.fee ?? "0", 7),
     quote_hash: quoteHash,
   });
+}
+
+export async function createRoute(params: {
+  address: string;
+  quote: AnchorQuote;
+  routeId?: Buffer;
+  signTransaction: SignTransaction;
+  onUpdate: (update: TransactionUpdate) => void;
+}) {
+  const { onUpdate } = params;
+  const routeId = params.routeId ?? randomId();
+  onUpdate({ phase: "simulating", message: "Simulating route selection…" });
+  const transaction = await prepareRouteTransaction({ ...params, routeId });
+  if (!isSelectableQuote(params.quote, new Date())) throw new Error("Route quote expired during preparation");
   onUpdate({ phase: "awaiting_signature", message: "Authorize route selection in your wallet." });
   let submittedHash: string | undefined;
   let lastStatus: string | undefined;
@@ -116,27 +127,41 @@ export async function createRoute(params: {
   return { routeId, hash: submittedHash };
 }
 
-export async function recordSettlement(params: {
+export async function prepareSettlementTransaction(params: {
   address: string;
   routeId: Buffer;
+  receiptId: Buffer;
   paymentHash: string;
   succeeded: boolean;
-  onUpdate: (update: TransactionUpdate) => void;
+  signTransaction?: SignTransaction;
 }) {
-  const { address, routeId, paymentHash, succeeded, onUpdate } = params;
+  const { address, routeId, paymentHash, succeeded } = params;
   const client = new SettlementReceiptClient({
     ...baseClientOptions(address),
     contractId: SETTLEMENT_RECEIPT_CONTRACT_ID,
-    signTransaction: walletSigner(address),
+    signTransaction: params.signTransaction,
   });
-  onUpdate({ phase: "simulating", message: "Simulating settlement receipt…" });
-  const transaction = await client.record_outcome({
-    receipt_id: randomId(),
+  return client.record_outcome({
+    receipt_id: params.receiptId,
     route_id: routeId,
     user: address,
     transaction_hash: Buffer.from(paymentHash, "hex"),
     status_code: succeeded ? 1 : 2,
   });
+}
+
+export async function recordSettlement(params: {
+  address: string;
+  routeId: Buffer;
+  receiptId?: Buffer;
+  paymentHash: string;
+  succeeded: boolean;
+  signTransaction: SignTransaction;
+  onUpdate: (update: TransactionUpdate) => void;
+}) {
+  const { routeId, onUpdate } = params;
+  onUpdate({ phase: "simulating", message: "Simulating settlement receipt…" });
+  const transaction = await prepareSettlementTransaction({ ...params, receiptId: params.receiptId ?? randomId() });
   onUpdate({ phase: "awaiting_signature", message: "Authorize the settlement receipt." });
   let submittedHash: string | undefined;
   let lastStatus: string | undefined;
