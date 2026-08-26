@@ -60,7 +60,7 @@ export async function importValidationSnapshot(database: SqlDatabase, input: unk
       snapshot.runs.some((run) => (run.state === "FORM_SUBMITTED") !== (run.formStatus === "CONFIRMED") ||
         (run.state === "FORM_SUBMITTED" && run.pending))) throw new Error("INVALID_VALIDATION_EXPORT");
   if (snapshot.runs.length && (!snapshot.lastRunAt || !snapshot.nextRunAt ||
-      Date.parse(snapshot.nextRunAt) < Date.parse(snapshot.lastRunAt) + 37 * 60_000 ||
+      Date.parse(snapshot.nextRunAt) < Date.parse(snapshot.lastRunAt) + 17 * 60_000 ||
       snapshot.runs.some((run) => Date.parse(run.createdAt) > Date.parse(snapshot.lastRunAt!) || run.history.at(-1)?.state !== run.state))) {
     throw new Error("INVALID_VALIDATION_SCHEDULE");
   }

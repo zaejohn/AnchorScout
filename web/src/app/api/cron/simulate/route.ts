@@ -10,7 +10,7 @@ function response(body: unknown, status = 200) {
   return Response.json(body, { status, headers: { "Cache-Control": "no-store" } });
 }
 
-// cron-job.org: POST each minute; database controls new starts every 37 minutes.
+// cron-job.org: POST each minute; database controls new starts every 17 minutes.
 export async function POST(request: Request) {
   if (!authorizeCron(request.headers.get("authorization"))) return response({ error: "Unauthorized" }, 401);
   if (!process.env.DATABASE_URL) return response({ error: "Simulation database is not configured" }, 503);

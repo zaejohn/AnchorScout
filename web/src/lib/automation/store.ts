@@ -122,7 +122,7 @@ export class SimulationStore {
           [run.id, now, profileId],
         );
         await connection.query(
-          "UPDATE anchorscout_simulation_control SET active_run_id = $1, last_run_at = $2, next_run_at = $2::timestamptz + interval '37 minutes' WHERE id = 1",
+          "UPDATE anchorscout_simulation_control SET active_run_id = $1, last_run_at = $2, next_run_at = $2::timestamptz + interval '17 minutes' WHERE id = 1",
           [run.id, now],
         );
       }
