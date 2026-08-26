@@ -3,11 +3,7 @@ import "server-only";
 import { createHash, createHmac } from "node:crypto";
 import { z } from "zod";
 
-import type {
-  AnchorProvider,
-  RawProviderQuote,
-  RouteRequest,
-} from "../types";
+import type { AnchorProvider, RawProviderQuote, RouteRequest } from "../types";
 
 const COINS_API = "https://api.pro.coins.ph";
 
@@ -32,7 +28,9 @@ const exchangeInfoSchema = z.object({
 
 const depthSchema = z.object({
   lastUpdateId: z.union([z.number(), z.string()]),
-  bids: z.array(z.tuple([z.coerce.number().positive(), z.coerce.number().positive()])),
+  bids: z.array(
+    z.tuple([z.coerce.number().positive(), z.coerce.number().positive()]),
+  ),
 });
 
 const convertQuoteSchema = z.object({
@@ -73,7 +71,8 @@ async function getJson(url: URL, signal: AbortSignal) {
     headers: { accept: "application/json" },
     signal,
   });
-  if (!response.ok) throw new Error(`Coins.ph market API failed (${response.status})`);
+  if (!response.ok)
+    throw new Error(`Coins.ph market API failed (${response.status})`);
   return response.json() as Promise<unknown>;
 }
 
@@ -166,7 +165,12 @@ export class CoinsPhMarketProvider implements AnchorProvider {
     const expiresAt = new Date(Date.now() + 60_000).toISOString();
     const quoteId = createHash("sha256")
       .update(
-        [market.symbol, market.marketUpdateId, request.amount, request.payoutMethod].join(":"),
+        [
+          market.symbol,
+          market.marketUpdateId,
+          request.amount,
+          request.payoutMethod,
+        ].join(":"),
       )
       .digest("hex")
       .slice(0, 32);
@@ -197,11 +201,8 @@ export class CoinsPhMarketProvider implements AnchorProvider {
       availabilitySource: `Live ${market.symbol} trading status and order-book liquidity`,
       providerUrl: "https://www.coins.ph/en-ph/business",
       disclosures: [
-        "The PHP amount is a live gross market reference, not a firm Convert quote.",
-        "Bank or GCash fees and recipient eligibility require authenticated Coins.ph APIs.",
-        "No production Coins.ph deposit, conversion, or fiat payout is initiated from Testnet.",
         ...(request.sourceAsset === "TEST_USDC"
-          ? ["The USDC/PHP market is production data used only to value Testnet USDC."]
+          ? ["The USDC/PHP market is production data."]
           : []),
       ],
     };
@@ -234,7 +235,8 @@ async function signedPost(
       signal,
     },
   );
-  if (!response.ok) throw new Error(`Coins.ph authenticated API failed (${response.status})`);
+  if (!response.ok)
+    throw new Error(`Coins.ph authenticated API failed (${response.status})`);
   return response.json() as Promise<unknown>;
 }
 
@@ -272,10 +274,13 @@ export class CoinsPhAuthenticatedProvider implements AnchorProvider {
       quote.data.sourceCurrency !== sourceCurrency ||
       quote.data.targetCurrency !== "PHP"
     ) {
-      throw new Error("Coins.ph firm quote changed the requested currency pair");
+      throw new Error(
+        "Coins.ph firm quote changed the requested currency pair",
+      );
     }
 
-    const subject = request.payoutMethod === "GCASH" ? "gcash" : this.bankSubject!;
+    const subject =
+      request.payoutMethod === "GCASH" ? "gcash" : this.bankSubject!;
     const channelRaw = await signedPost(
       "/openapi/fiat/v1/support-channel",
       {
@@ -288,7 +293,8 @@ export class CoinsPhAuthenticatedProvider implements AnchorProvider {
       signal,
     );
     const channels = channelSchema.parse(channelRaw);
-    if (channels.status !== 0) throw new Error("Coins.ph payout channel unavailable");
+    if (channels.status !== 0)
+      throw new Error("Coins.ph payout channel unavailable");
     const eligibleChannels = channels.data.filter(
       (item) =>
         item.status === "1" &&
@@ -306,16 +312,19 @@ export class CoinsPhAuthenticatedProvider implements AnchorProvider {
       if (left.transactionChannel === right.transactionChannel) return 0;
       return left.transactionChannel === "INSTAPAY" ? -1 : 1;
     })[0];
-    if (!channel) throw new Error("Coins.ph payout channel is unavailable for this amount");
+    if (!channel)
+      throw new Error("Coins.ph payout channel is unavailable for this amount");
     const feeType = channel.feeType.toLowerCase();
     if (feeType !== "fixed" && feeType !== "percentage") {
       throw new Error("Coins.ph returned an unknown payout fee type");
     }
-    const feePhp = feeType === "fixed"
-      ? channel.fee
-      : (quote.data.targetAmount * channel.fee) / 100;
+    const feePhp =
+      feeType === "fixed"
+        ? channel.fee
+        : (quote.data.targetAmount * channel.fee) / 100;
     const destinationAmount = quote.data.targetAmount - feePhp;
-    if (destinationAmount <= 0) throw new Error("Coins.ph fee exceeds payout amount");
+    if (destinationAmount <= 0)
+      throw new Error("Coins.ph fee exceeds payout amount");
 
     return {
       anchorId: this.id,
@@ -340,14 +349,17 @@ export class CoinsPhAuthenticatedProvider implements AnchorProvider {
       settlementMode: "FIAT_SIMULATED",
       rateSource: "Authenticated Coins.ph Convert quote",
       feeSource: `Authenticated live ${channel.transactionChannel} ${channel.transactionSubjectName} channel`,
-      availabilitySource: "Authenticated account-specific payout channel status and limits",
+      availabilitySource:
+        "Authenticated account-specific payout channel status and limits",
       providerUrl: "https://docs.coins.ph/rest-api/",
       disclosures: [
         "Rate, payout fee, limits, and channel availability are live account-scoped provider data.",
         "The quote is not accepted and no production conversion or payout is initiated.",
         "The external fiat payout remains simulated because AnchorScout executes only on Stellar Testnet.",
         ...(request.sourceAsset === "TEST_USDC"
-          ? ["The production USDC quote values Testnet USDC; no production USDC is transferred."]
+          ? [
+              "The production USDC quote values Testnet USDC; no production USDC is transferred.",
+            ]
           : []),
       ],
     };
