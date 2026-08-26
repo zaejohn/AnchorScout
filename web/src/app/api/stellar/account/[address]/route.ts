@@ -23,10 +23,13 @@ export async function GET(
       signal: AbortSignal.timeout(8_000),
     });
     if (response.status === 404) {
-      return noStoreJson({ error: "Account is not funded on Testnet" }, 404);
+      return noStoreJson({ error: "Account is not funded" }, 404);
     }
     if (!response.ok) throw new Error(`Horizon returned ${response.status}`);
-    const account = (await response.json()) as { balances: HorizonBalance[]; sequence: string };
+    const account = (await response.json()) as {
+      balances: HorizonBalance[];
+      sequence: string;
+    };
     return noStoreJson({
       address,
       sequence: account.sequence,

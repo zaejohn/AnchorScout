@@ -19,7 +19,7 @@ const workflow = [
   },
   {
     title: "Sign and track",
-    description: "Authorize each step yourself, then follow the Testnet proof and public receipt.",
+    description: "Authorize each step yourself, then follow the proof and public receipt.",
   },
 ];
 
@@ -27,7 +27,7 @@ const features = [
   {
     label: "01 / LIVE SOURCES",
     title: "Data with a paper trail",
-    description: "Coins.ph market depth, MoneyGram Testnet capabilities, and configured SEP-38 anchors arrive through one normalized comparison surface.",
+    description: "Coins.ph market depth, MoneyGram capabilities, and configured SEP-38 anchors arrive through one normalized comparison surface.",
   },
   {
     label: "02 / HONEST QUOTES",
@@ -138,7 +138,7 @@ export default function Home() {
           <p>Stellar gives AnchorScout a settlement rail that is open, efficient, and easy to verify. Soroban records the route decision and receipt while your wallet stays the only place a signature can originate.</p>
           <div className="landing-why-points">
             <span><b aria-hidden="true">✓</b> User-owned signatures</span>
-            <span><b aria-hidden="true">✓</b> Public Testnet evidence</span>
+            <span><b aria-hidden="true">✓</b> Public evidence</span>
             <span><b aria-hidden="true">✓</b> Contract-backed history</span>
           </div>
         </div>
@@ -182,7 +182,7 @@ export default function Home() {
 
       <footer className="landing-footer">
         <Link className="brand" href="/" aria-label="AnchorScout home"><span className="brand-mark">A</span><span>AnchorScout</span></Link>
-        <span>Built on Stellar Testnet for transparent route decisions.</span>
+        <span>Built on Stellar for transparent route decisions.</span>
         <span>External fiat payout steps remain clearly marked when simulated.</span>
       </footer>
     </main>

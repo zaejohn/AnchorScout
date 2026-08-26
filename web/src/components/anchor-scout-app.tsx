@@ -23,7 +23,7 @@ type HistoryRoute = {
   routeTransactionHash: string | null; receiptTransactionHash: string | null;
 };
 
-const initialTransfer: TransactionUpdate = { phase: "idle", message: "Ready for a Testnet XLM transfer." };
+const initialTransfer: TransactionUpdate = { phase: "idle", message: "Ready for a XLM transfer." };
 const PROOF_CHECKPOINT_KEY = "anchorscout:proof-checkpoint";
 const short = (value: string, leading = 6) => value.length > 18 ? `${value.slice(0, leading)}…${value.slice(-6)}` : value;
 const peso = new Intl.NumberFormat("en-PH", { style: "currency", currency: "PHP", maximumFractionDigits: 2 });
