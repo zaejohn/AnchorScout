@@ -21,6 +21,7 @@ import {
 import {
   PROOF_PAYMENT_DESTINATION,
   stellarExpertUrl,
+  stellarHorizonTransactionUrl,
 } from "@/lib/stellar/config";
 import {
   createRoute,
@@ -64,7 +65,9 @@ type HistoryRoute = {
   fee: string;
   selectedAt: number;
   status: string;
+  network: "TESTNET";
   paymentHash: string | null;
+  paymentStatus: "SUCCESS" | "FAILED" | "NOT_FOUND" | "UNAVAILABLE" | null;
   receiptId: string | null;
   routeTransactionHash: string | null;
   receiptTransactionHash: string | null;
@@ -1662,18 +1665,25 @@ export function AnchorScoutApp({
                       <span className={`status-badge ${route.status.toLowerCase()}`}>
                         {route.status}
                       </span>
+                      <span>{route.network === "TESTNET" ? "Stellar Testnet" : route.network}</span>
                       {route.routeTransactionHash && (
-                        <a href={stellarExpertUrl("tx", route.routeTransactionHash)} target="_blank" rel="noreferrer">
+                        <a href={stellarHorizonTransactionUrl(route.routeTransactionHash)} target="_blank" rel="noreferrer">
                           Route tx ↗
                         </a>
                       )}
                       {route.paymentHash && (
-                        <a href={stellarExpertUrl("tx", route.paymentHash)} target="_blank" rel="noreferrer">
+                        <a href={stellarHorizonTransactionUrl(route.paymentHash)} target="_blank" rel="noreferrer">
                           Payment {short(route.paymentHash, 8)} ↗
                         </a>
                       )}
+                      {route.paymentStatus === "NOT_FOUND" && (
+                        <span>Payment not found on Testnet</span>
+                      )}
+                      {route.paymentStatus === "UNAVAILABLE" && (
+                        <span>Payment verification temporarily unavailable</span>
+                      )}
                       {route.receiptTransactionHash && (
-                        <a href={stellarExpertUrl("tx", route.receiptTransactionHash)} target="_blank" rel="noreferrer">
+                        <a href={stellarHorizonTransactionUrl(route.receiptTransactionHash)} target="_blank" rel="noreferrer">
                           Receipt tx ↗
                         </a>
                       )}

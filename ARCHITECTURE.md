@@ -79,7 +79,7 @@ Classic payments use `preparing -> awaiting_signature -> submitted -> confirmed|
 
 ## Event and history synchronization
 
-The application polls RPC `getEvents` for both deployed contract IDs, overlaps the last scanned ledger, and deduplicates by event ID. Events trigger a durable contract-history refresh. Event retention is not treated as permanent storage: wallet history is rebuilt from the Route Registry's paginated user index and receipt reads.
+The application polls RPC `getEvents` for both deployed contract IDs, overlaps the last scanned ledger, and deduplicates by event ID. Events trigger a durable contract-history refresh. Event retention is not treated as permanent storage: wallet history is rebuilt from the Route Registry's paginated user index and receipt reads. Before History exposes a stored classic payment hash, the server resolves the exact hash through Testnet Horizon and uses Horizon's canonical response. Route and receipt invocation hashes are accepted only from successful, correctly encoded Testnet RPC events.
 
 ## Environment and trust boundaries
 

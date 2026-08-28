@@ -29,6 +29,7 @@
 - [x] Reuse shared provider/transaction code for real Friendbot, USDC trustline/live swap, route selection, XLM proof and atomic settlement; keep unavailable fiat settlement explicitly simulated
 - [x] Pass lint, TypeScript, 208 web tests, production build and specialist app review; verify the production-built comparison UI and unauthorized cron rejection
 - [x] Complete one real 1,685-USDC Testnet simulation through confirmed Google Form submission, verify app history, and verify persisted interval gating after process restart; export its consumed profile reservation for hosted import
+- [x] Verify History payment hashes against Testnet Horizon, validate RPC event hashes, and link transaction evidence to the canonical Testnet record instead of trusting unverified identifiers
 
 ## Human-controlled completion gates
 

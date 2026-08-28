@@ -24,6 +24,9 @@ export const stellarExpertUrl = (kind: "account" | "tx" | "contract", value: str
   return `https://stellar.expert/explorer/testnet/${segment}/${value}`;
 };
 
+export const stellarHorizonTransactionUrl = (hash: string) =>
+  `https://horizon-testnet.stellar.org/transactions/${hash}`;
+
 export function hasContractDeployment() {
   return hasValidContractDeployment(
     ROUTE_REGISTRY_CONTRACT_ID,

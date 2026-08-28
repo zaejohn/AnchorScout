@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import { hasValidContractDeployment } from "./config";
+import {
+  hasValidContractDeployment,
+  stellarHorizonTransactionUrl,
+} from "./config";
 
 const ROUTE = "CBYCCXCJLFQKUIPNJDQNXXIGV26S4FSXGHRYQQBPU3EYUGE6EXRRDZ5H";
 const RECEIPT = "CBQKALTRUEBNTDOKL7UOOSEFPJMHZRQCWV5C6VZA4T3TO4WEB2OIBDJM";
@@ -19,5 +22,12 @@ describe("public Testnet configuration", () => {
         RECEIPT,
       ),
     ).toBe(false);
+  });
+
+  it("builds transaction evidence links against canonical Testnet Horizon", () => {
+    const hash = "ab".repeat(32);
+    expect(stellarHorizonTransactionUrl(hash)).toBe(
+      `https://horizon-testnet.stellar.org/transactions/${hash}`,
+    );
   });
 });

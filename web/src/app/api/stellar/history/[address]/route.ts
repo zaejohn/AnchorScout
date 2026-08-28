@@ -1,9 +1,11 @@
 import { Buffer } from "buffer";
 import { StrKey } from "@stellar/stellar-sdk";
 import { noStoreJson } from "@/lib/server/responses";
-import { hasContractDeployment } from "@/lib/stellar/config";
+import { findConfirmedXlmTransaction } from "@/lib/stellar/classic";
+import { hasContractDeployment, STELLAR_NETWORK } from "@/lib/stellar/config";
 import { getRouteReceipt, getWalletRoutes } from "@/lib/stellar/contracts";
 import { getRouteTransactionEvidence } from "@/lib/stellar/event-evidence";
+import { resolveHistoryPayment } from "@/lib/stellar/history";
 import { unitsToDecimal } from "@/lib/stellar/units";
 
 const statusTag = (status: { tag: string }) => status.tag.toUpperCase();
@@ -35,9 +37,16 @@ export async function GET(
             : await getRouteReceipt(Buffer.from(route.route_id));
         const routeId = Buffer.from(route.route_id).toString("hex");
         const evidence = transactionEvidence.get(routeId);
-        const paymentHash = route.transaction_hash
+        const storedPaymentHash = route.transaction_hash
           ? Buffer.from(route.transaction_hash).toString("hex")
           : null;
+        const payment =
+          storedPaymentHash && storedPaymentHash !== "0".repeat(64)
+            ? await resolveHistoryPayment(
+                storedPaymentHash,
+                findConfirmedXlmTransaction,
+              )
+            : null;
         return {
           routeId,
           anchorId: route.anchor_id,
@@ -48,7 +57,9 @@ export async function GET(
           fee: unitsToDecimal(route.fee, 7),
           selectedAt: Number(route.selected_at),
           status: statusTag(route.status),
-          paymentHash: paymentHash === "0".repeat(64) ? null : paymentHash,
+          network: STELLAR_NETWORK,
+          paymentHash: payment?.hash ?? null,
+          paymentStatus: payment?.status ?? null,
           receiptId: receipt
             ? Buffer.from(receipt.receipt_id).toString("hex")
             : null,

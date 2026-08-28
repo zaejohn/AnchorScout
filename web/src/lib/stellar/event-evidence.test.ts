@@ -32,6 +32,7 @@ describe("contract transaction evidence", () => {
           topic: topic("route_selected"),
         },
         { id: "2", txHash: "2".repeat(64), topic: ["bad"] },
+        { id: "3", txHash: "not-a-transaction-hash", topic: topic("route_selected") },
       ]).size,
     ).toBe(0);
   });

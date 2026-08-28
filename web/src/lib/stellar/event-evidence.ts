@@ -19,6 +19,8 @@ export type RouteTransactionEvidence = {
   receiptTransactionHash?: string;
 };
 
+const TRANSACTION_HASH = /^[0-9a-f]{64}$/;
+
 function topicValue(value: string) {
   return scValToNative(xdr.ScVal.fromXDR(value, "base64"));
 }
@@ -33,10 +35,12 @@ export function evidenceFromEvents(events: RawContractEvent[]) {
       const name = String(topicValue(event.topic[0]));
       const routeId = Buffer.from(topicValue(event.topic[1])).toString("hex");
       if (!/^[0-9a-f]{64}$/.test(routeId)) continue;
+      const transactionHash = event.txHash.toLowerCase();
+      if (!TRANSACTION_HASH.test(transactionHash)) continue;
       const current = evidence.get(routeId) ?? {};
-      if (name === "route_selected") current.routeTransactionHash = event.txHash;
+      if (name === "route_selected") current.routeTransactionHash = transactionHash;
       if (name === "settlement_recorded" || name === "route_status_changed") {
-        current.receiptTransactionHash = event.txHash;
+        current.receiptTransactionHash = transactionHash;
       }
       evidence.set(routeId, current);
     } catch {
