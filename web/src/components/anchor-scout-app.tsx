@@ -35,7 +35,6 @@ import {
 import {
   applyBroadcastUpdate,
   parseProofCheckpoint,
-  resumableProofLabel,
   type ProofCheckpoint,
 } from "@/lib/stellar/proof";
 import {
@@ -50,6 +49,11 @@ type Balance = { asset?: string; balance: string; issuer?: string };
 type WorkflowStep = "request" | "compare" | "proof";
 type ProofStage = "route" | "payment" | "receipt" | "complete";
 type AppModal = "utility" | "history" | null;
+type FlowToast = {
+  tone: "success" | "error";
+  title: string;
+  message: string;
+};
 type HistoryRoute = {
   routeId: string;
   anchorId: string;
@@ -148,6 +152,7 @@ export function AnchorScoutApp({
     message: "Select an externally sourced route to start the Testnet proof.",
   });
   const [proofStage, setProofStage] = useState<ProofStage>("route");
+  const [flowToast, setFlowToast] = useState<FlowToast | null>(null);
   const [checkpoint, setCheckpoint] = useState<ProofCheckpoint | null>(null);
   const [history, setHistory] = useState<HistoryRoute[]>([]);
   const [historyBusy, setHistoryBusy] = useState(false);
@@ -301,6 +306,19 @@ export function AnchorScoutApp({
               : "The saved route is finalized as failed; no payment will be repeated.",
           hash: checkpoint.receiptTransactionHash ?? checkpoint.paymentHash,
         });
+        setFlowToast(
+          savedRoute.status === "COMPLETED"
+            ? {
+                tone: "success",
+                title: "Proof completed",
+                message: "Your route and receipt are confirmed on Stellar Testnet.",
+              }
+            : {
+                tone: "error",
+                title: "Proof failed",
+                message: "The saved route was finalized without repeating the payment.",
+              },
+        );
         return;
       }
       if (checkpoint.receiptPending) {
@@ -396,6 +414,12 @@ export function AnchorScoutApp({
       window.clearInterval(timer);
     };
   }, []);
+
+  useEffect(() => {
+    if (!flowToast) return;
+    const timer = window.setTimeout(() => setFlowToast(null), 7_000);
+    return () => window.clearTimeout(timer);
+  }, [flowToast]);
 
   useEffect(() => {
     if (!openModal) return;
@@ -507,16 +531,6 @@ export function AnchorScoutApp({
     ? `${searchedRequest.amount} ${sourceAssetLabel(searchedRequest.sourceAsset)} → ${searchedRequest.destinationCurrency} · ${payoutLabel(searchedRequest.payoutMethod)}`
     : requestSummary;
   const proofActive = Boolean(selected || checkpoint);
-  const proofStageIndex = { route: 0, payment: 1, receipt: 2, complete: 3 }[
-    proofStage
-  ];
-  const proofStepState = (stage: Exclude<ProofStage, "complete">) => {
-    const stageIndex = { route: 0, payment: 1, receipt: 2 }[stage];
-    if (proofStage === "complete" || stageIndex < proofStageIndex)
-      return "complete";
-    if (stageIndex === proofStageIndex) return "current";
-    return "pending";
-  };
   const activeRouteLabel = selected?.anchorName ?? checkpoint?.anchorId ?? "Saved route";
   const activeRouteSummary = selected
     ? `${selected.sourceAmount} ${sourceAssetLabel(selected.sourceAsset)} → ${selected.destinationCurrency} · ${payoutLabel(selected.payoutMethod)}`
@@ -532,6 +546,21 @@ export function AnchorScoutApp({
       contractsConfigured &&
       ["idle", "failed", "rejected", "expired"].includes(execution.phase),
   );
+  const proofActionLabel = !wallet
+    ? walletBusy
+      ? "Checking wallet…"
+      : "Connect wallet & continue"
+    : execution.phase === "awaiting_signature"
+      ? "Approve in your wallet"
+      : ["preparing", "simulating"].includes(execution.phase)
+        ? "Preparing secure proof…"
+        : ["signed", "submitting", "submitted", "pending"].includes(
+              execution.phase,
+            )
+          ? "Confirming on Testnet…"
+          : checkpoint
+            ? "Continue secure proof"
+            : "Start secure proof";
 
   const handleConnect = async () => {
     setWalletBusy(true);
@@ -540,8 +569,10 @@ export function AnchorScoutApp({
       const session = await connectWallet();
       setWallet(session);
       setWalletMessage("Connected and verified on Stellar Testnet.");
+      return session;
     } catch (error) {
       setWalletMessage(classifyWalletError(error).message);
+      return null;
     } finally {
       setWalletBusy(false);
     }
@@ -661,9 +692,10 @@ export function AnchorScoutApp({
     focusWizardStep(step);
   };
 
-  const handleExecute = async () => {
+  const handleExecute = async (session?: WalletSession) => {
     if (executionLock.current) return;
-    if (!wallet || (!selected && !checkpoint)) return;
+    const activeWallet = session ?? wallet;
+    if (!activeWallet || (!selected && !checkpoint)) return;
     if (!checkpoint && selected && !isSelectableQuote(selected, new Date()))
       return setExecution({
         phase: "expired",
@@ -678,7 +710,7 @@ export function AnchorScoutApp({
     executionLock.current = true;
     try {
       let progress =
-        checkpoint?.walletAddress === wallet.address ? checkpoint : null;
+        checkpoint?.walletAddress === activeWallet.address ? checkpoint : null;
       const updateProgress = (
         stage: "route" | "payment" | "receipt",
         update: TransactionUpdate,
@@ -710,8 +742,8 @@ export function AnchorScoutApp({
         const routeId = Buffer.from(progress.routeId, "hex");
         try {
           await recordSettlement({
-            address: wallet.address,
-            signTransaction: walletSigner(wallet.address),
+            address: activeWallet.address,
+            signTransaction: walletSigner(activeWallet.address),
             routeId,
             paymentHash,
             succeeded: false,
@@ -735,7 +767,12 @@ export function AnchorScoutApp({
             "The payment did not complete and the original route was finalized as failed.",
           hash: paymentHash === "0".repeat(64) ? undefined : paymentHash,
         });
-        await refreshHistory(wallet.address);
+        setFlowToast({
+          tone: "error",
+          title: "Proof stopped safely",
+          message: "The payment failed and the route was finalized without retrying it.",
+        });
+        await refreshHistory(activeWallet.address);
       };
 
       if (!progress) {
@@ -744,14 +781,14 @@ export function AnchorScoutApp({
         track("route_selected", { anchor: selected.anchorId });
         const routeId = createRouteId();
         progress = {
-          walletAddress: wallet.address,
+          walletAddress: activeWallet.address,
           anchorId: selected.anchorId,
           routeId: routeId.toString("hex"),
         };
         try {
           const route = await createRoute({
-            address: wallet.address,
-            signTransaction: walletSigner(wallet.address),
+            address: activeWallet.address,
+            signTransaction: walletSigner(activeWallet.address),
             quote: selected,
             routeId,
             onUpdate: (update) => updateProgress("route", update),
@@ -798,10 +835,10 @@ export function AnchorScoutApp({
         setProofStage("payment");
         try {
           const payment = await sendXlm({
-            source: wallet.address,
+            source: activeWallet.address,
             destination: PROOF_PAYMENT_DESTINATION,
             amount: "0.1",
-            signTransaction: walletSigner(wallet.address),
+            signTransaction: walletSigner(activeWallet.address),
             onUpdate: (update) =>
               updateProgress("payment", update, "Proof payment: "),
           });
@@ -833,8 +870,8 @@ export function AnchorScoutApp({
       setProofStage("receipt");
       try {
         await recordSettlement({
-          address: wallet.address,
-          signTransaction: walletSigner(wallet.address),
+          address: activeWallet.address,
+          signTransaction: walletSigner(activeWallet.address),
           routeId,
           paymentHash: confirmedPaymentHash,
           succeeded: true,
@@ -853,15 +890,33 @@ export function AnchorScoutApp({
       }
       persistCheckpoint(null);
       setProofStage("complete");
+      setExecution({
+        phase: "confirmed",
+        message: "Route, payment, and receipt confirmed on Stellar Testnet.",
+      });
+      setFlowToast({
+        tone: "success",
+        title: "Proof complete",
+        message: "Your route is confirmed and available in History.",
+      });
       track("route_settlement_confirmed", { anchor: progress.anchorId });
       await Promise.all([
-        refreshHistory(wallet.address),
-        refreshBalances(wallet.address),
+        refreshHistory(activeWallet.address),
+        refreshBalances(activeWallet.address),
       ]);
     } catch (error) {
-      setExecution(classifyWalletError(error));
+      const update = classifyWalletError(error);
+      setExecution(update);
+      setFlowToast({
+        tone: "error",
+        title:
+          update.phase === "rejected"
+            ? "Approval cancelled"
+            : "Proof not completed",
+        message: update.message,
+      });
       if (error instanceof SubmittedTransactionPendingError) {
-        void refreshHistory(wallet.address);
+        void refreshHistory(activeWallet.address);
       }
       track("route_settlement_failed");
     } finally {
@@ -1034,30 +1089,23 @@ export function AnchorScoutApp({
       <div className="app-flow">
         {wizardStep === "request" && (
           <section id="request" className="workflow-section request-section" aria-labelledby="request-title">
+          <div className="workflow-step-meta">
+            <span>Step 1 of 3</span>
+            <span>{wallet ? "Wallet ready" : "No wallet needed yet"}</span>
+          </div>
           <div className="workflow-heading">
             <div className="workflow-title">
-              <span className="step">01</span>
               <div>
                 <p className="workflow-kicker">Transfer details</p>
                 <h2 id="request-title" ref={requestHeadingRef} tabIndex={-1}>
-                  Where do you want to send money?
+                  Set up your transfer
                 </h2>
               </div>
             </div>
-            <span className="workflow-status info">
-              {wallet ? "Wallet connected" : "Preview mode"}
-            </span>
           </div>
           <p className="workflow-lede">
-            Set the amount and payout preference. We&apos;ll compare live provider
-            data for this exact request.
+            Choose what you&apos;re sending and how the recipient should receive it.
           </p>
-          {!wallet && (
-            <div className="preview-note" role="note">
-              <strong>Preview mode</strong>
-              <span>Compare routes now; connect a wallet before signing.</span>
-            </div>
-          )}
           <form className="route-form" onSubmit={handleQuoteSearch}>
             <label className="amount-field">
               <span>Amount to send</span>
@@ -1135,7 +1183,7 @@ export function AnchorScoutApp({
               </label>
             </div>
             <button className="button primary wide" disabled={quoteBusy}>
-              {quoteBusy ? "Comparing live routes…" : "Compare routes"}
+              {quoteBusy ? "Checking live routes…" : "Compare live routes"}
             </button>
           </form>
           {quoteError && (
@@ -1143,11 +1191,9 @@ export function AnchorScoutApp({
               {quoteError}
             </div>
           )}
-          <div className="wizard-step-footer">
-            <span className="wizard-step-progress">
-              <strong>Step 1</strong> of 3
-            </span>
-            <span>Next: compare live provider routes</span>
+          <div className="wizard-hint" role="note">
+            <span aria-hidden="true">↗</span>
+            <span>Quotes are read-only. You&apos;ll connect your wallet only after choosing a route.</span>
           </div>
           </section>
         )}
@@ -1160,13 +1206,16 @@ export function AnchorScoutApp({
             aria-live="polite"
             aria-busy={quoteBusy}
           >
+          <div className="workflow-step-meta">
+            <span>Step 2 of 3</span>
+            <span>Live provider data</span>
+          </div>
           <div className="workflow-heading">
             <div className="workflow-title">
-              <span className="step">02</span>
               <div>
-                <p className="workflow-kicker">Live comparison</p>
+                <p className="workflow-kicker">Route comparison</p>
                 <h2 id="compare-title" ref={resultsHeadingRef} tabIndex={-1}>
-                  Available routes
+                  Choose your route
                 </h2>
               </div>
             </div>
@@ -1189,10 +1238,10 @@ export function AnchorScoutApp({
             </div>
           </div>
           <div className="results-context">
-            <span>{searchedRequest ? `For ${searchedSummary}` : `For ${requestSummary}`}</span>
+            <span>{searchedRequest ? searchedSummary : requestSummary}</span>
             {liveQuotes.length > 0 && (
               <strong>
-                {liveQuotes.length} {liveQuotes.length === 1 ? "route" : "routes"}
+                {liveQuotes.length} live {liveQuotes.length === 1 ? "option" : "options"}
               </strong>
             )}
           </div>
@@ -1258,10 +1307,10 @@ export function AnchorScoutApp({
               className="button ghost"
               onClick={() => openWizardStep("request")}
             >
-              ← Back to details
+              Back
             </button>
             <span>
-              <strong>Step 2 of 3</strong> · Select a route to continue
+              Select one option to review the secure Testnet proof.
             </span>
           </div>
           </section>
@@ -1273,21 +1322,23 @@ export function AnchorScoutApp({
             className={`workflow-section proof-section ${proofActive ? "is-active" : "is-locked"}`}
             aria-labelledby="proof-title"
           >
+          <div className="workflow-step-meta">
+            <span>Step 3 of 3</span>
+            <span>Stellar Testnet</span>
+          </div>
           <div className="workflow-heading">
             <div className="workflow-title">
-              <span className="step">03</span>
               <div>
-                <p className="workflow-kicker">Wallet-authorized proof</p>
+                <p className="workflow-kicker">Final review</p>
                 <h2 id="proof-title" ref={proofHeadingRef} tabIndex={-1}>
-                  Review &amp; sign
+                  Confirm your route
                 </h2>
               </div>
             </div>
-            <span className="workflow-status info">Testnet only</span>
           </div>
           {!proofActive ? (
             <div className="proof-locked">
-              <div className="proof-locked-icon" aria-hidden="true">4</div>
+              <div className="proof-locked-icon" aria-hidden="true">○</div>
               <div>
                 <strong>Select a route to unlock signing</strong>
                 <p>
@@ -1316,43 +1367,24 @@ export function AnchorScoutApp({
                   <span>estimated receive</span>
                 </div>
               </div>
-              <div className="proof-disclosure" role="note">
-                <strong>Testnet proof, not a fiat payout.</strong>
-                <span>
-                  The route data is externally sourced. The proof records your
-                  selection and sends 0.1 XLM on Testnet; it does not transfer
-                  the quoted amount or execute a PHP payout.
-                </span>
+              <div className="proof-guidance" role="note">
+                <span className="proof-guidance-icon" aria-hidden="true">✓</span>
+                <div>
+                  <strong>One guided action</strong>
+                  <p>
+                    Start once and AnchorScout will prepare, submit, and confirm
+                    each step automatically. Stellar may ask for up to three
+                    wallet approvals because each transaction remains under your control.
+                  </p>
+                </div>
               </div>
-              <ol className="proof-timeline">
-                {(
-                  [
-                    ["route", "Record route", "Route Registry contract"],
-                    ["payment", "Send 0.1 XLM", "Horizon-confirmed Testnet payment"],
-                    ["receipt", "Finalize receipt", "Wallet-authorized cross-contract result"],
-                  ] as const
-                ).map(([stage, label, detail], index) => {
-                  const state = proofStepState(stage);
-                  return (
-                    <li className={`proof-timeline-step ${state}`} key={stage}>
-                      <span className="proof-step-number" aria-hidden="true">
-                        {state === "complete" ? "✓" : index + 1}
-                      </span>
-                      <span>
-                        <strong>{label}</strong>
-                        <small>{detail}</small>
-                      </span>
-                      <em>{state === "complete" ? "Done" : state === "current" ? "Current" : "Next"}</em>
-                    </li>
-                  );
-                })}
-              </ol>
+              <ProofProgress stage={proofStage} update={execution} />
               {proofStage === "complete" && (
                 <div className="wizard-complete" role="status">
                   <span className="wizard-complete-icon" aria-hidden="true">✓</span>
                   <div>
-                    <strong>Proof complete</strong>
-                    <span>Route, payment, and receipt evidence are confirmed on Testnet.</span>
+                    <strong>Everything is confirmed</strong>
+                    <span>Your route and receipt are now available from History.</span>
                   </div>
                 </div>
               )}
@@ -1361,25 +1393,20 @@ export function AnchorScoutApp({
                   Contract actions unlock after the Testnet deployment IDs are configured.
                 </div>
               )}
-              <TransactionStatus update={execution} />
               <div className="proof-actions">
                 <button
                   className="button primary"
                   disabled={!wallet ? walletBusy : !proofCanStart}
                   onClick={() => {
                     if (wallet) void handleExecute();
-                    else void handleConnect();
+                    else {
+                      void handleConnect().then((session) => {
+                        if (session) void handleExecute(session);
+                      });
+                    }
                   }}
                 >
-                  {!wallet
-                    ? walletBusy
-                      ? "Checking wallet…"
-                      : "Connect wallet to sign"
-                    : proofStage === "complete"
-                    ? "Proof complete"
-                    : checkpoint
-                      ? resumableProofLabel(checkpoint)
-                      : "Sign Testnet proof"}
+                  {proofStage === "complete" ? "Proof complete" : proofActionLabel}
                 </button>
                 {proofStage === "complete" && (
                   <button
@@ -1412,19 +1439,12 @@ export function AnchorScoutApp({
                       openWizardStep("compare");
                     }}
                   >
-                    ← Back to routes
+                    Back to routes
                   </button>
                 )}
               </div>
-              <div className="wizard-step-footer">
-                <span className="wizard-step-progress">
-                  <strong>Step 3</strong> of 3
-                </span>
-                <span>{proofStage === "complete" ? "All steps complete" : "Authorize the proof from your wallet"}</span>
-              </div>
               <p className="fine-print">
-                Every signature stays in your wallet. The confirmed hashes and
-                contract records remain available from History in the navbar.
+                Testnet proof only. No quoted amount or PHP payout is sent.
               </p>
             </>
           )}
@@ -1450,6 +1470,30 @@ export function AnchorScoutApp({
           Built on Stellar ↗
         </a>
       </footer>
+
+      {flowToast && (
+        <div
+          className={`flow-toast ${flowToast.tone}`}
+          role="alert"
+          aria-live="assertive"
+          aria-atomic="true"
+        >
+          <span className="flow-toast-icon" aria-hidden="true">
+            {flowToast.tone === "success" ? "✓" : "!"}
+          </span>
+          <div>
+            <strong>{flowToast.title}</strong>
+            <p>{flowToast.message}</p>
+          </div>
+          <button
+            type="button"
+            aria-label="Dismiss notification"
+            onClick={() => setFlowToast(null)}
+          >
+            ×
+          </button>
+        </div>
+      )}
 
       {utilityOpen && (
         <div
@@ -1648,6 +1692,84 @@ export function AnchorScoutApp({
   );
 }
 
+function ProofProgress({
+  stage,
+  update,
+}: {
+  stage: ProofStage;
+  update: TransactionUpdate;
+}) {
+  const stages = [
+    ["route", "Save route"],
+    ["payment", "Send proof payment"],
+    ["receipt", "Confirm receipt"],
+  ] as const;
+  const activeIndex =
+    stage === "complete" ? stages.length : stages.findIndex(([id]) => id === stage);
+  const stepName =
+    stage === "route"
+      ? "your route"
+      : stage === "payment"
+        ? "the proof payment"
+        : "your receipt";
+  const message =
+    stage === "complete"
+      ? "All proof steps are confirmed."
+      : update.phase === "awaiting_signature"
+        ? `Approval requested for ${stepName}. Check your wallet.`
+        : ["preparing", "simulating"].includes(update.phase)
+          ? `Preparing ${stepName}…`
+          : ["signed", "submitting", "submitted", "pending"].includes(
+                update.phase,
+              )
+            ? `Confirming ${stepName} on Stellar Testnet…`
+            : update.phase === "confirmed"
+              ? `${stepName[0].toUpperCase()}${stepName.slice(1)} confirmed. Continuing automatically…`
+              : update.message;
+  const hasError = ["failed", "rejected", "expired"].includes(update.phase);
+
+  return (
+    <div className={`proof-progress ${hasError ? "has-error" : ""}`}>
+      <div className="proof-progress-heading">
+        <strong>Secure proof</strong>
+        <span>{stage === "complete" ? "Complete" : "Runs automatically"}</span>
+      </div>
+      <ol aria-label="Proof progress">
+        {stages.map(([id, label], index) => {
+          const state =
+            stage === "complete" || index < activeIndex
+              ? "complete"
+              : index === activeIndex
+                ? "current"
+                : "pending";
+          return (
+            <li className={state} key={id}>
+              <span aria-hidden="true">{state === "complete" ? "✓" : ""}</span>
+              <strong>{label}</strong>
+            </li>
+          );
+        })}
+      </ol>
+      <div className="proof-live-status" role="status" aria-live="polite">
+        <span className="proof-live-dot" aria-hidden="true" />
+        <p>{message}</p>
+        {update.hash && (
+          <details>
+            <summary>Transaction details</summary>
+            <a
+              href={stellarExpertUrl("tx", update.hash)}
+              target="_blank"
+              rel="noreferrer"
+            >
+              View {short(update.hash, 8)} ↗
+            </a>
+          </details>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function QuoteCard({
   quote,
   clock,
@@ -1675,6 +1797,7 @@ function QuoteCard({
   const kindLabel = quote.quoteKind.replaceAll("_", " ").toLowerCase();
   return (
     <article className={`quote-card ${selected ? "selected" : ""}`}>
+      <div className="quote-card-main">
       <div className="quote-top">
         <span className="rank">#{quote.rank}</span>
         {quote.best && <span className="best">Best value</span>}
@@ -1692,16 +1815,6 @@ function QuoteCard({
         </a>
         <small>{kindLabel}</small>
       </p>
-      <strong className="receive">
-        {peso.format(Number(quote.destinationAmount))}
-      </strong>
-      <span className="amount-qualifier">
-        {quote.destinationAmountIncludesFees
-          ? "provider-reported payout after quoted deductions"
-          : quote.fee === null
-            ? "gross reference; payout fee not deducted"
-            : "after reported payout fee"}
-      </span>
       <dl>
         <div>
           <dt>Rate</dt>
@@ -1740,6 +1853,19 @@ function QuoteCard({
           ))}
         </div>
       </details>
+      </div>
+      <div className="quote-card-side">
+        <span>Estimated receive</span>
+        <strong className="receive">
+          {peso.format(Number(quote.destinationAmount))}
+        </strong>
+        <small className="amount-qualifier">
+          {quote.destinationAmountIncludesFees
+            ? "After quoted deductions"
+            : quote.fee === null
+              ? "Before payout fees"
+              : "After reported payout fee"}
+        </small>
       <button
         type="button"
         className="button secondary wide"
@@ -1754,9 +1880,10 @@ function QuoteCard({
           : selected
             ? "Selected ✓"
             : selectable
-              ? "Choose this route"
+              ? "Continue with this route"
               : "Refresh required"}
       </button>
+      </div>
     </article>
   );
 }
