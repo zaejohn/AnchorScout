@@ -45,7 +45,7 @@ describe("private validation reservation migration", () => {
       hashes: { funding: "a".repeat(64) }, formStatus: completed ? "CONFIRMED" : "NOT_SENT", attempts: 0,
       createdAt, history: [{ state: "CREATED", at: createdAt }, { state, at: createdAt }],
     };
-    return { version: 1, runs: [run], lastRunAt: createdAt, nextRunAt: new Date(Date.parse(createdAt) + 37 * 60_000).toISOString(), activeRunId: completed ? null : id };
+    return { version: 1, runs: [run], lastRunAt: createdAt, nextRunAt: new Date(Date.parse(createdAt) + 17 * 60_000).toISOString(), activeRunId: completed ? null : id };
   }
 
   it("imports completed reservations without a wallet master and preserves the interval", async () => {
@@ -104,7 +104,7 @@ describe("private validation reservation migration", () => {
     expect((await store.status()).nextRunAt).toBe(later);
   });
 
-  it("rejects duplicate profiles and snapshots that could bypass the 37-minute interval", async () => {
+  it("rejects duplicate profiles and snapshots that could bypass the 17-minute interval", async () => {
     const input = snapshot();
     await expect(importValidationSnapshot(database, { ...input, runs: [...input.runs, ...input.runs] })).rejects.toThrow("INVALID_VALIDATION_EXPORT");
     await expect(importValidationSnapshot(database, { ...input, nextRunAt: input.lastRunAt })).rejects.toThrow("INVALID_VALIDATION_SCHEDULE");

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import Image from "next/image";
 
 const workflow = [
   {
@@ -80,7 +81,7 @@ export default function Home() {
     <main className="landing-page">
       <header className="landing-header">
         <Link className="brand" href="/" aria-label="AnchorScout home">
-          <span className="brand-mark">A</span>
+          <span className="brand-mark"><Image className="brand-logo" src="/logo.png" alt="" width={42} height={42} priority /></span>
           <span>AnchorScout</span>
         </Link>
         <nav className="landing-nav" aria-label="Main navigation">
@@ -181,7 +182,7 @@ export default function Home() {
       </section>
 
       <footer className="landing-footer">
-        <Link className="brand" href="/" aria-label="AnchorScout home"><span className="brand-mark">A</span><span>AnchorScout</span></Link>
+        <Link className="brand" href="/" aria-label="AnchorScout home"><span className="brand-mark"><Image className="brand-logo" src="/logo.png" alt="" width={42} height={42} /></span><span>AnchorScout</span></Link>
         <span>Built on Stellar for transparent route decisions.</span>
         <span>External fiat payout steps remain clearly marked when simulated.</span>
       </footer>

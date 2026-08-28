@@ -14,6 +14,24 @@ export const metadata: Metadata = {
   title: "AnchorScout — Compare Stellar routes",
   description:
     "Compare transparent Stellar payment routes, sign from your wallet, and verify settlement on-chain.",
+  icons: {
+    icon: [
+      { url: "/logo.png", type: "image/png" },
+      { url: "/favicon.ico", type: "image/x-icon" },
+    ],
+    apple: "/logo.png",
+  },
+  openGraph: {
+    title: "AnchorScout — Compare Stellar routes",
+    description: "Compare transparent Stellar payment routes and verify settlement on-chain.",
+    images: [{ url: "/logo.png", alt: "AnchorScout" }],
+  },
+  twitter: {
+    card: "summary",
+    title: "AnchorScout — Compare Stellar routes",
+    description: "Compare transparent Stellar payment routes and verify settlement on-chain.",
+    images: ["/logo.png"],
+  },
 };
 
 export default function RootLayout({

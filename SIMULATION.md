@@ -15,7 +15,7 @@ Each new run permanently reserves one unused profile, a unique generated Testnet
 - `searchQuotes`, `configuredProviders`, request validation and `isSelectableQuote` are the application's existing comparison implementation. A random available, unexpired returned route is selected. The snapshot retains provider provenance, missing fees/ETA, and fiat-simulation disclosures.
 - Shared generated-binding transaction builders record the quote, create the same separate **0.1 XLM proof payment**, and record the receipt that atomically completes both contracts. The quote's USDC amount is **not** transferred to a provider. The manual app supports the same proof for Test USDC comparison and explains this distinction.
 - Every signed envelope is saved before submission. Confirmation, USDC balance, route owner/amount/quote hash, receipt owner/ID and payment reference are checked before advancing. No form is sent until final contract state is verified.
-- Each cron invocation advances a bounded step. In-progress runs resume on subsequent minute ticks; only **new runs** are gated to at least 37 minutes after the last start. There is no backlog burst after downtime, and an unfinished/blocked run prevents another start.
+- Each cron invocation advances a bounded step. In-progress runs resume on subsequent minute ticks; only **new runs** are gated to at least 17 minutes after the last start. There is no backlog burst after downtime, and an unfinished/blocked run prevents another start.
 
 ## Configure and seed
 
@@ -65,7 +65,7 @@ No Vercel Cron configuration is used. An authenticated `GET` at the same URL is 
 
 If a managed database is unavailable, `pnpm simulation:validate --local` uses persistent local PGlite solely for validation, not as a Vercel substitute. Local state and the generated validation-only master are saved under ignored `web/.simulation/`. Keep this folder private and intact. It exports reserved run records to `.simulation/validation-export.json`; subsequent `simulation:setup` automatically imports them into Postgres before enabling production cron, so validation profiles cannot be reused. An unfinished import requires the same validation master; a completed import does not. Never seed on a different machine without also copying this private export.
 
-The CLI stops after one completed run or a blocking/retry condition. It never bypasses the scheduler. Re-running resumes the same active run. Local polling can be faster than cron, but it does not bypass the 37-minute new-run gate.
+The CLI stops after one completed run or a blocking/retry condition. It never bypasses the scheduler. Re-running resumes the same active run. Local polling can be faster than cron, but it does not bypass the 17-minute new-run gate.
 
 ## Failure and recovery rules
 

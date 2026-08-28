@@ -60,10 +60,10 @@ describe("persistent simulation scheduler", () => {
     );
     expect(counts.rows[0]).toEqual({ runs: 1, used: 1 });
     const status = await store.status();
-    expect(Date.parse(status.nextRunAt!) - Date.parse(status.lastRunAt!)).toBe(37 * 60_000);
+    expect(Date.parse(status.nextRunAt!) - Date.parse(status.lastRunAt!)).toBe(17 * 60_000);
   });
 
-  it("resumes the same durable run before 37 minutes and fences old lease tokens", async () => {
+  it("resumes the same durable run before 17 minutes and fences old lease tokens", async () => {
     const first = claimed(await store.claim(identity));
     first.run.state = "FUNDED";
     first.run.hashes.funding = "a".repeat(64);
@@ -88,7 +88,7 @@ describe("persistent simulation scheduler", () => {
     expect(second.token).not.toBe(first.token);
   });
 
-  it("persists every state, finishes atomically, and waits 37 minutes before another profile", async () => {
+  it("persists every state, finishes atomically, and waits 17 minutes before another profile", async () => {
     const first = claimed(await store.claim(identity));
     for (const state of SIMULATION_STATES.slice(1, -1)) {
       first.run.state = state;

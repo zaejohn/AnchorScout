@@ -180,4 +180,4 @@ The final public reads return a `Completed` route and `Completed` receipt linked
 
 ## Automated Testnet user simulation
 
-See [SIMULATION.md](SIMULATION.md) for the durable 37-minute scheduler, database setup, required secrets, cron-job.org headers, real validation command, exact form fields, and safe recovery. The endpoint is `POST /api/cron/simulate`; no Vercel Cron is used. These are synthetic test runs, not independent human adoption metrics.
+See [SIMULATION.md](SIMULATION.md) for the durable 17-minute scheduler, database setup, required secrets, cron-job.org headers, real validation command, exact form fields, and safe recovery. The endpoint is `POST /api/cron/simulate`; no Vercel Cron is used. These are synthetic test runs, not independent human adoption metrics.

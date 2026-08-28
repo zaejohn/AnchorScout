@@ -63,3 +63,10 @@
 - Decision: Use current strict-receive XLM→official Circle Testnet USDC liquidity; do not automate Circle's CAPTCHA faucet or invent providers. Execute the same explicit 0.1 XLM proof for USDC comparisons; unavailable external fiat settlement stays disclosed as simulated.
 - Decision: Signed envelopes are durable before broadcast. Only confirmed chain states advance. Google Form POST ambiguity blocks rather than risking duplicate feedback; synthetic responses must not be represented as human adoption.
 - Consequences: DATABASE_URL and server-only cron/wallet secrets are required for deployment. Local PGlite is a validation harness only, with reservations exported/imported before hosted scheduling. No Vercel Cron, custom token, contract ABI change, or Mainnet operation is introduced.
+
+## 2026-08-27 — Linear, wallet-first application workflow
+
+- Context: The `/app` route exposed the right capabilities, but comparison, wallet, proof, utility, and history appeared as equal-weight panels. Mobile visual ordering also differed from the DOM order.
+- Decision: Present the workflow as Wallet → Transfer details → Available routes → Review & sign, with a persistent in-page stepper. Keep quote preview available before connection, require the wallet for signing, and progressively disclose the optional XLM utility. Keep history compact and wallet-scoped.
+- Why: A linear hierarchy makes the next action obvious without hiding live provider data, and matching DOM/visual order improves keyboard and assistive-technology navigation. A selected-route summary, explicit Testnet disclosure, nearby quote refresh, and terminal proof state reduce accidental or misunderstood signatures.
+- Consequences: The provider adapters, route ranking, wallet signer, contract calls, and transaction checkpoints remain unchanged; only the client presentation/state orchestration and responsive layout were reorganized. Quote results are marked stale after request edits until refreshed.
