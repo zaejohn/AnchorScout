@@ -36,9 +36,11 @@ Settlement Receipt contract --finalize_route--> Route Registry contract
 
 The default registry contains no invented providers. It calls the public Coins.ph exchange API for live `XLMPHP` or `USDCPHP` trading status and bid-side order-book depth, then values the requested amount against visible liquidity. This is labeled `MARKET_REFERENCE`; its gross PHP result never claims that a Convert quote, payout fee, or bank/GCash settlement is available.
 
-An authenticated Coins.ph adapter is implemented and tested for a future protected deployment. It requests a firm Convert quote and combines it with account-scoped `support-channel` fee, limit, status, and rail data without accepting the quote or initiating cash-out. It is deliberately not registered on the public `/api/quotes` endpoint: exposing a business TRADE key through an anonymous proxy would leak account-scoped availability and permit quota abuse. Activating it requires a real user/tenant authorization boundary and durable rate limiting.
+An authenticated Coins.ph adapter requests a firm Convert quote and combines it with account-scoped `support-channel` fee, limit, status, and rail data without accepting the quote or initiating cash-out. Anonymous requests always use public market data. A trusted server caller must present a dedicated bearer token, then a durable Postgres per-minute limiter authorizes the account-scoped path; complete Coins.ph credentials activate a firm-first adapter with public-market fallback. Partial configuration remains public-market-only. Provider credentials and the access token never enter the client bundle.
 
-MoneyGram's real Testnet SEP-1 and SEP-24 endpoints are checked for Testnet USDC capability and limits. MoneyGram exposes a hosted cash route rather than PHP bank/GCash or SEP-38 pricing, so the composite card attributes its PHP rate to Coins.ph and marks only the unsupported fiat payout as simulated. A configurable generic SEP-38 provider remains available through server-only environment variables.
+MoneyGram's real Testnet SEP-1 and SEP-24 endpoints are checked for Testnet USDC capability and limits. MoneyGram is eligible only for the explicit `CASH_PICKUP` rail; it never appears as bank or GCash. Its composite card attributes the PHP reference to Coins.ph and describes the hosted SEP-24/KYC boundary. A configurable generic SEP-38 provider remains available only for the bank-oriented SEP-31 comparison context.
+
+The optional Onramper adapter is registered only with a server-side API key and at least one provider-issued asset ID that explicitly identifies Stellar Testnet and the requested asset. It performs the current provider-prescribed `/supported/assets` → payment methods → quotes sequence on every comparison and requests transaction-initiation-capable sell quotes for the Philippines. Each successful underlying provider response becomes its own normalized quote; Mainnet/generic assets and blocked/error/empty entries never become cards. Staging and production base URLs are fixed by an environment enum, not caller input.
 
 Every normalized quote carries `quoteKind`, `settlementMode`, rate/fee/availability sources, provider URL, and disclosures. Missing fee or numeric timing stays nullable; such a route can be inspected and selected for the separate Testnet proof but can never be labeled "Best." One provider failure, unsupported corridor, or timeout is health metadata and never cancels other results.
 
@@ -67,7 +69,7 @@ Every normalized quote carries `quoteKind`, `settlementMode`, rate/fee/availabil
 4. A route can transition exactly once from `Pending` to `Completed` or `Failed`.
 5. A receipt's user must equal the stored route owner.
 6. Source and destination amounts are positive; fees are non-negative; stored text is non-empty and bounded.
-7. Quote selection requires an unexpired `AVAILABLE` quote. A "Best" label additionally requires complete fee and numeric timing data.
+7. Quote selection requires an unexpired `AVAILABLE` quote. A "Best" label additionally requires complete fee and numeric timing data. The committed quote hash binds the payout method as well as provider, amounts, fee, quote ID, and expiry.
 8. Submitted transactions are not shown as confirmed until Horizon or RPC confirms them.
 9. A receipt's classic transaction hash is a wallet-authorized reference; clients must verify it with Horizon before presenting payment confirmation.
 

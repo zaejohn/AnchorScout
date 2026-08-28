@@ -70,3 +70,17 @@
 - Decision: Present the workflow as Wallet → Transfer details → Available routes → Review & sign, with a persistent in-page stepper. Keep quote preview available before connection, require the wallet for signing, and progressively disclose the optional XLM utility. Keep history compact and wallet-scoped.
 - Why: A linear hierarchy makes the next action obvious without hiding live provider data, and matching DOM/visual order improves keyboard and assistive-technology navigation. A selected-route summary, explicit Testnet disclosure, nearby quote refresh, and terminal proof state reduce accidental or misunderstood signatures.
 - Consequences: The provider adapters, route ranking, wallet signer, contract calls, and transaction checkpoints remain unchanged; only the client presentation/state orchestration and responsive layout were reorganized. Quote results are marked stale after request edits until refreshed.
+
+## 2026-08-28 — Sequential three-step route wizard
+
+- Context: The linear workflow still rendered request, comparison, and proof panels together, which made the next action compete with later-stage content.
+- Decision: Mount only the active step in `/app`: transfer details → live comparison → wallet-authorized proof. Advance after a successful quote response and route selection, while allowing completed steps to be revisited with explicit back actions.
+- Why: A focused surface reduces cognitive load without changing the provider, wallet, contract, or transaction behavior. Guarded step navigation also keeps users from signing before a route has been selected.
+- Consequences: Section IDs remain available for semantics, but step navigation is state-driven rather than hash-driven. Quote errors remain visible in the step that initiated the request, and refresh failures remain visible in comparison.
+
+## 2026-08-28 — Capability-driven external provider eligibility
+
+- Context: A source-asset-only check made MoneyGram look like a bank/GCash option, while the provider layer could return only one quote per adapter and therefore could not represent multiple live aggregator offers.
+- Decision: Make payout rail part of route eligibility, add `CASH_PICKUP`, restrict MoneyGram to Test USDC cash pickup, and bind all material normalized quote semantics into the on-chain quote hash. Anonymous Coins.ph requests remain public-market-only; trusted bearer-authorized callers pass a durable database rate limit before the authenticated firm-first adapter is registered. Register Onramper only with an API key plus an explicit provider-issued Stellar Testnet asset ID, then emit only successful providers discovered through current live asset/payment/quote responses.
+- Why: Provider cards should reflect current external capabilities rather than configured names or inferred corridors. Dynamic unsupported outcomes remain health evidence and never become selectable routes.
+- Consequences: Onramper may return zero or more independently attributed cards. Generic/Mainnet USDC, blocked providers, failed quote entries, and unsupported payment methods are excluded. MoneyGram no longer appears for bank or GCash, anonymous users cannot proxy account-scoped Coins.ph credentials, and existing automated bank comparisons continue to select only eligible bank routes.

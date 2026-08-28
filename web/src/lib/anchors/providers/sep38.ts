@@ -132,6 +132,15 @@ export class Sep38IndicativeProvider implements AnchorProvider {
     private readonly homeDomain: string,
   ) {}
 
+  supports(request: RouteRequest) {
+    return request.payoutMethod === "BANK"
+      ? true
+      : {
+          supported: false,
+          message: "This configured SEP-38 route only proves a SEP-31 bank corridor",
+        };
+  }
+
   async getQuote(
     request: RouteRequest,
     signal: AbortSignal,
@@ -182,6 +191,7 @@ export class Sep38IndicativeProvider implements AnchorProvider {
       sourceAmount,
       destinationCurrency: request.destinationCurrency,
       destinationAmount: sourceAmount * totalPrice,
+      destinationAmountIncludesFees: true,
       exchangeRate: Number(price.price),
       fee,
       feeCurrency: request.sourceAsset === "TEST_USDC" ? "USDC" : request.sourceAsset,

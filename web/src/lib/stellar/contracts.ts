@@ -28,9 +28,24 @@ async function sha256(value: string) {
 }
 
 export function hashRouteQuote(quote: AnchorQuote) {
-  return sha256(JSON.stringify({ anchorId: quote.anchorId, quoteId: quote.quoteId,
-    sourceAmount: quote.sourceAmount, destinationAmount: quote.destinationAmount,
-    fee: quote.fee, expiresAt: quote.expiresAt }));
+  return sha256(
+    JSON.stringify({
+      anchorId: quote.anchorId,
+      quoteId: quote.quoteId,
+      sourceAsset: quote.sourceAsset,
+      sourceAmount: quote.sourceAmount,
+      destinationCurrency: quote.destinationCurrency,
+      destinationAmount: quote.destinationAmount,
+      destinationAmountIncludesFees: quote.destinationAmountIncludesFees,
+      exchangeRate: quote.exchangeRate,
+      fee: quote.fee,
+      feeCurrency: quote.feeCurrency,
+      payoutMethod: quote.payoutMethod,
+      quoteKind: quote.quoteKind,
+      settlementMode: quote.settlementMode,
+      expiresAt: quote.expiresAt,
+    }),
+  );
 }
 
 function baseClientOptions(address?: string) {

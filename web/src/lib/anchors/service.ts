@@ -1,4 +1,5 @@
 import { normalizeQuote } from "./normalize";
+import { UnsupportedProviderRouteError } from "./provider-errors";
 import { rankQuotes } from "./ranking";
 import type {
   AnchorQuote,
@@ -64,22 +65,40 @@ export async function searchQuotes(
   const timeoutMs = options.timeoutMs ?? 5_000;
   const settled = await Promise.allSettled(
     providers.map(async (provider) => {
-      const unsupported = provider.supports ? !provider.supports(request) : false;
+      const support = provider.supports?.(request);
+      const unsupported =
+        typeof support === "boolean"
+          ? !support
+          : support
+            ? !support.supported
+            : false;
+      const unsupportedMessage =
+        typeof support === "object" ? support.message : undefined;
+      if (unsupported) {
+        return {
+          provider,
+          unsupported: true,
+          unsupportedMessage,
+          quotes: [] as AnchorQuote[],
+        };
+      }
+      const rawQuotes = await withTimeout(async (signal) => {
+        if (provider.getQuotes) return provider.getQuotes(request, signal);
+        if (provider.getQuote) return [await provider.getQuote(request, signal)];
+        throw new Error("Provider has no quote implementation");
+      }, provider.timeoutMs ?? timeoutMs);
+      if (rawQuotes.length === 0) {
+        throw new UnsupportedProviderRouteError(
+          "Provider returned no live routes for this request",
+        );
+      }
       return {
         provider,
-        unsupported,
-        quote: unsupported
-          ? null
-          : assertQuoteMatchesRequest(
-              normalizeQuote(
-                await withTimeout(
-                  (signal) => provider.getQuote(request, signal),
-                  timeoutMs,
-                ),
-                now,
-              ),
-              request,
-            ),
+        unsupported: false,
+        unsupportedMessage: undefined,
+        quotes: rawQuotes.map((quote) =>
+          assertQuoteMatchesRequest(normalizeQuote(quote, now), request),
+        ),
       };
     }),
   );
@@ -89,29 +108,37 @@ export async function searchQuotes(
   settled.forEach((result, index) => {
     const provider = providers[index];
     if (result.status === "fulfilled") {
-      if (result.value.unsupported || !result.value.quote) {
+      if (result.value.unsupported || result.value.quotes.length === 0) {
         providerResults.push({
           providerId: provider.id,
           providerName: provider.name,
           status: "unsupported",
-          message: "Provider does not support this asset and payout combination",
+          message:
+            result.value.unsupportedMessage ??
+            "Provider does not support this asset and payout combination",
         });
         return;
       }
-      quotes.push(result.value.quote);
+      quotes.push(...result.value.quotes);
       providerResults.push({
         providerId: provider.id,
         providerName: provider.name,
         status: "ok",
+        quoteCount: result.value.quotes.length,
       });
       return;
     }
     const timedOut = result.reason instanceof ProviderTimeoutError;
+    const unsupported = result.reason instanceof UnsupportedProviderRouteError;
     providerResults.push({
       providerId: provider.id,
       providerName: provider.name,
-      status: timedOut ? "timed_out" : "failed",
-      message: timedOut ? TIMEOUT_MESSAGE : "Provider quote unavailable",
+      status: timedOut ? "timed_out" : unsupported ? "unsupported" : "failed",
+      message: timedOut
+        ? TIMEOUT_MESSAGE
+        : unsupported
+          ? result.reason.message
+          : "Provider quote unavailable",
     });
   });
 

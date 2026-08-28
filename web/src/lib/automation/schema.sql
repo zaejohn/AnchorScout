@@ -35,3 +35,10 @@ CREATE TABLE IF NOT EXISTS anchorscout_simulation_control (
 );
 
 INSERT INTO anchorscout_simulation_control(id) VALUES (1) ON CONFLICT (id) DO NOTHING;
+
+CREATE TABLE IF NOT EXISTS anchorscout_provider_quote_limits (
+  subject_hash text NOT NULL,
+  window_start timestamptz NOT NULL,
+  request_count integer NOT NULL CHECK (request_count > 0),
+  PRIMARY KEY (subject_hash, window_start)
+);

@@ -21,6 +21,7 @@ function quote(overrides: Partial<AnchorQuote> = {}): AnchorQuote {
   return {
     anchorId: "external-test-fixture", anchorName: "External provider fixture", quoteId: "quote-1",
     sourceAsset: "TEST_USDC", sourceAmount: "1777", destinationCurrency: "PHP", destinationAmount: "100000",
+    destinationAmountIncludesFees: false,
     exchangeRate: "56.27462", fee: null, feeCurrency: null, payoutMethod: "BANK", estimatedMinutes: null,
     estimatedSettlement: "Unavailable", expiresAt: new Date(Date.now() + 60_000).toISOString(), status: "AVAILABLE",
     quoteKind: "MARKET_REFERENCE", settlementMode: "FIAT_SIMULATED", rateSource: "Fixture", feeSource: "Unavailable",

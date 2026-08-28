@@ -4,6 +4,7 @@ import { createHash, createHmac } from "node:crypto";
 import { z } from "zod";
 
 import type { AnchorProvider, RawProviderQuote, RouteRequest } from "../types";
+import { UnsupportedProviderRouteError } from "../provider-errors";
 
 const COINS_API = "https://api.pro.coins.ph";
 
@@ -155,6 +156,15 @@ export class CoinsPhMarketProvider implements AnchorProvider {
   readonly id = "coins-ph-market";
   readonly name = "Coins.ph live market";
 
+  supports(request: RouteRequest) {
+    return request.payoutMethod === "CASH_PICKUP"
+      ? {
+          supported: false,
+          message: "Coins.ph does not advertise cash pickup for this market route",
+        }
+      : true;
+  }
+
   async getQuote(
     request: RouteRequest,
     signal: AbortSignal,
@@ -183,6 +193,7 @@ export class CoinsPhMarketProvider implements AnchorProvider {
       sourceAmount: market.sourceAmount,
       destinationCurrency: request.destinationCurrency,
       destinationAmount: market.destinationAmount,
+      destinationAmountIncludesFees: false,
       exchangeRate: market.exchangeRate,
       fee: null,
       feeCurrency: null,
@@ -251,7 +262,19 @@ export class CoinsPhAuthenticatedProvider implements AnchorProvider {
   ) {}
 
   supports(request: RouteRequest) {
-    return request.payoutMethod === "GCASH" || Boolean(this.bankSubject);
+    if (request.payoutMethod === "CASH_PICKUP") {
+      return {
+        supported: false,
+        message: "Coins.ph authenticated payouts do not advertise cash pickup",
+      };
+    }
+    if (request.payoutMethod === "BANK" && !this.bankSubject) {
+      return {
+        supported: false,
+        message: "Coins.ph bank quotes require a configured bank subject",
+      };
+    }
+    return true;
   }
 
   async getQuote(
@@ -313,8 +336,11 @@ export class CoinsPhAuthenticatedProvider implements AnchorProvider {
       if (left.transactionChannel === right.transactionChannel) return 0;
       return left.transactionChannel === "INSTAPAY" ? -1 : 1;
     })[0];
-    if (!channel)
-      throw new Error("Coins.ph payout channel is unavailable for this amount");
+    if (!channel) {
+      throw new UnsupportedProviderRouteError(
+        "Coins.ph has no live payout channel for this amount",
+      );
+    }
     const feeType = channel.feeType.toLowerCase();
     if (feeType !== "fixed" && feeType !== "percentage") {
       throw new Error("Coins.ph returned an unknown payout fee type");
@@ -335,6 +361,7 @@ export class CoinsPhAuthenticatedProvider implements AnchorProvider {
       sourceAmount: quote.data.sourceAmount,
       destinationCurrency: request.destinationCurrency,
       destinationAmount,
+      destinationAmountIncludesFees: true,
       exchangeRate: quote.data.price,
       fee: feePhp,
       feeCurrency: "PHP",
@@ -364,5 +391,45 @@ export class CoinsPhAuthenticatedProvider implements AnchorProvider {
           : []),
       ],
     };
+  }
+}
+
+export class CoinsPhPreferredProvider implements AnchorProvider {
+  readonly id = "coins-ph";
+  readonly name = "Coins.ph";
+
+  constructor(
+    private readonly firm: CoinsPhAuthenticatedProvider,
+    private readonly market = new CoinsPhMarketProvider(),
+  ) {}
+
+  supports(request: RouteRequest) {
+    return this.market.supports(request);
+  }
+
+  async getQuote(
+    request: RouteRequest,
+    signal: AbortSignal,
+  ): Promise<RawProviderQuote> {
+    const firmSupport = this.firm.supports(request);
+    const firmEligible =
+      typeof firmSupport === "boolean"
+        ? firmSupport
+        : firmSupport.supported;
+    if (firmEligible) {
+      try {
+        return await this.firm.getQuote(request, signal);
+      } catch (error) {
+        console.warn("coins_ph_firm_quote_fallback", {
+          reason:
+            error instanceof UnsupportedProviderRouteError
+              ? "unsupported_route"
+              : "provider_error",
+        });
+        // A signed quote is optional. Preserve the public live market route if
+        // account-scoped availability, credentials, or quota are unavailable.
+      }
+    }
+    return this.market.getQuote(request, signal);
   }
 }

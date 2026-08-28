@@ -96,7 +96,11 @@ NEXT_PUBLIC_PROOF_PAYMENT_DESTINATION=GDW2INHQPIWK6JYMVDPCT3JZHMBSYPDEWB56PCRC2J
 
 No provider credential is required for live Coins.ph `XLMPHP`/`USDCPHP` market-reference results or MoneyGram Testnet capability checks. The public market adapter values the requested amount against the bid-side order book, so visible-depth slippage is included.
 
-The repository includes a tested authenticated Coins.ph adapter that requests a firm Convert quote and live `support-channel` fee, status, limits, and eligible rail. It is intentionally not registered on the anonymous public quote endpoint. A production deployment must first add user or tenant authorization, durable rate limiting, and narrowly scoped business credentials; server-only keys alone do not make a public proxy safe. The adapter never accepts the quote or calls cash-out.
+The authenticated Coins.ph adapter requests a firm Convert quote and live `support-channel` fee, status, limits, and eligible rail. Anonymous `/api/quotes` requests always stay on the public market adapter. A trusted server caller may send `Authorization: Bearer <COINS_PH_QUOTE_ACCESS_TOKEN>`; only then, with `COINS_PH_FIRM_QUOTES_ENABLED=true` and both Coins.ph credentials, does the registry prefer the authenticated quote and safely fall back to the public market if it is unavailable. `DATABASE_URL` provides the durable per-minute abuse limit configured by `COINS_PH_QUOTE_RATE_LIMIT_PER_MINUTE`. Bank requests additionally require `COINS_PH_BANK_SUBJECT`. The adapter never accepts the quote or calls cash-out, and its bearer token must never be shipped to browser code.
+
+Run `pnpm simulation:setup` after deploying this change so the existing database also receives the idempotent `anchorscout_provider_quote_limits` table used by that access boundary.
+
+Onramper is registered only when `ONRAMPER_API_KEY` and at least one provider-issued `ONRAMPER_XLM_TESTNET_ASSET_ID` or `ONRAMPER_USDC_TESTNET_ASSET_ID` explicitly identify Stellar Testnet. For every request it calls the current `/supported/assets` sell endpoint, verifies the exact configured asset and PHP destination, discovers the requested bank/GCash payment method, and then calls the live quote endpoint. Only successful quote entries become route cards; error, blocked, generic/Mainnet-USDC, unsupported-payment, and empty responses remain unavailable. Use `ONRAMPER_ENVIRONMENT=staging` or `production` with the matching key and asset IDs supplied for that environment. Onramper's sandbox does not itself prove Testnet transaction support, so do not invent an ID.
 
 Optional `SEP38_ANCHOR_HOME_DOMAIN` and `SEP38_ANCHOR_NAME` enable a real indicative SEP-38 provider. The adapter discovers `ANCHOR_QUOTE_SERVER` through SEP-1, requires HTTPS, and only calls the home origin or origins explicitly listed in `SEP38_ALLOWED_QUOTE_ORIGINS`.
 
@@ -104,11 +108,11 @@ Optional `SEP38_ANCHOR_HOME_DOMAIN` and `SEP38_ANCHOR_NAME` enable a real indica
 
 | Provider | Data used now | Test environment | AnchorScout behavior |
 | --- | --- | --- | --- |
-| Coins.ph | Live public market status and bid depth; protected authenticated adapter implemented but not publicly registered | No public end-to-end Stellar/fiat sandbox documented | Production data is read-only; fiat execution is simulated on Testnet |
-| MoneyGram Ramps | Live Testnet SEP-1 and SEP-24 USDC capability/limits | Yes: Stellar Testnet anchor | Hosted cash is real Testnet capability; requested bank/GCash step is simulated and PHP rate is separately attributed to Coins.ph |
+| Coins.ph | Live public market status and bid depth, or trusted account-scoped firm quote and payout-channel data | No public end-to-end Stellar/fiat sandbox documented | Anonymous traffic remains public-market-only; firm access is bearer-protected and durably rate-limited; conversion and fiat execution are never initiated |
+| MoneyGram Ramps | Live Testnet SEP-1 and SEP-24 USDC cash-pickup capability/limits | Yes: Stellar Testnet anchor | Appears only for Test USDC + Cash pickup; PHP reference remains separately attributed to Coins.ph |
 | Configured SEP-38 anchor | Live SEP-1 discovery and `/price` response | Provider-specific | Indicative, comparison-only unless the provider supplies a compatible endpoint |
-| Onramper | Not enabled | Staging exists, but current probes returned no Stellar-to-PHP sell provider | Excluded until authenticated coverage proves the corridor |
-| TransFi | Not enabled | Credentialed sandbox exists | Excluded until capability APIs prove Stellar XLM/USDC-to-PHP coverage |
+| Onramper | Credentialed dynamic asset/payment/quote discovery | Staging exists, but it is not proof of Stellar Testnet transaction support | Registers only with an explicit provider-issued Stellar Testnet asset ID and emits only real successful quotes for that exact corridor |
+| TransFi | Not enabled | Credentialed sandbox exists | Excluded because the public matrix lists Stellar XLM/USDC as payout-only, not direct off-ramp deposits |
 
 Primary sources: [Coins.ph REST API](https://docs.coins.ph/rest-api/), [Coins.ph Business](https://www.coins.ph/en-ph/business), [MoneyGram Stellar integration](https://xramps.moneygram.com/ops/dev/stellar), [Onramper sell quotes](https://docs.onramper.com/reference/get_quotes-crypto-fiat), and [TransFi exchange rates](https://docs.transfi.com/reference/get-exchange-rates).
 

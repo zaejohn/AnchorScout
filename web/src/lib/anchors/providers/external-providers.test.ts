@@ -53,6 +53,10 @@ afterEach(() => {
 describe("provider registry", () => {
   it("contains only real external sources by default", () => {
     vi.stubEnv("SEP38_ANCHOR_HOME_DOMAIN", "");
+    vi.stubEnv("COINS_PH_FIRM_QUOTES_ENABLED", "");
+    vi.stubEnv("COINS_PH_API_KEY", "");
+    vi.stubEnv("COINS_PH_SECRET_KEY", "");
+    vi.stubEnv("ONRAMPER_API_KEY", "");
     const providers = configuredProviders();
     expect(providers.map((provider) => provider.id)).toEqual([
       "coins-ph-market",
@@ -61,6 +65,60 @@ describe("provider registry", () => {
     expect(providers.map((provider) => provider.name).join(" ")).not.toMatch(
       /Harbor|Bayani|Sampaguita/,
     );
+  });
+
+  it("keeps account-scoped Coins.ph off anonymous requests", () => {
+    vi.stubEnv("SEP38_ANCHOR_HOME_DOMAIN", "");
+    vi.stubEnv("COINS_PH_FIRM_QUOTES_ENABLED", "true");
+    vi.stubEnv("COINS_PH_API_KEY", "coins-key");
+    vi.stubEnv("COINS_PH_SECRET_KEY", "coins-secret");
+    const providers = configuredProviders();
+    expect(providers.map((provider) => provider.id)).toEqual([
+      "coins-ph-market",
+      "moneygram-testnet",
+    ]);
+  });
+
+  it("registers preferred firm Coins.ph only for an authorized account-scoped request", () => {
+    vi.stubEnv("SEP38_ANCHOR_HOME_DOMAIN", "");
+    vi.stubEnv("COINS_PH_FIRM_QUOTES_ENABLED", "true");
+    vi.stubEnv("COINS_PH_API_KEY", "coins-key");
+    vi.stubEnv("COINS_PH_SECRET_KEY", "coins-secret");
+    vi.stubEnv("ONRAMPER_API_KEY", "");
+    const providers = configuredProviders({
+      accountScopedCoinsAuthorized: true,
+    });
+    expect(providers.map((provider) => provider.id)).toEqual([
+      "coins-ph",
+      "moneygram-testnet",
+    ]);
+  });
+
+  it("registers Onramper only with an explicit Stellar Testnet asset id", () => {
+    vi.stubEnv("SEP38_ANCHOR_HOME_DOMAIN", "");
+    vi.stubEnv("COINS_PH_FIRM_QUOTES_ENABLED", "");
+    vi.stubEnv("ONRAMPER_API_KEY", "onramper-key");
+    vi.stubEnv("ONRAMPER_USDC_TESTNET_ASSET_ID", "usdc_stellar_testnet");
+    expect(configuredProviders().map((provider) => provider.id)).toEqual([
+      "coins-ph-market",
+      "moneygram-testnet",
+      "onramper",
+    ]);
+
+    vi.stubEnv("ONRAMPER_USDC_TESTNET_ASSET_ID", "usdc_stellar");
+    expect(configuredProviders().map((provider) => provider.id)).toEqual([
+      "coins-ph-market",
+      "moneygram-testnet",
+    ]);
+  });
+
+  it("keeps the public Coins.ph source when firm credentials are incomplete", () => {
+    vi.stubEnv("SEP38_ANCHOR_HOME_DOMAIN", "");
+    vi.stubEnv("COINS_PH_FIRM_QUOTES_ENABLED", "true");
+    vi.stubEnv("COINS_PH_API_KEY", "coins-key");
+    vi.stubEnv("COINS_PH_SECRET_KEY", "");
+    vi.stubEnv("ONRAMPER_API_KEY", "");
+    expect(configuredProviders()[0]?.id).toBe("coins-ph-market");
   });
 });
 
@@ -156,7 +214,7 @@ describe("Coins.ph providers", () => {
 });
 
 describe("MoneyGram capability composite", () => {
-  it("uses live Testnet capability and external market data without claiming a bank payout", async () => {
+  it("uses live Testnet capability and external market data only for cash pickup", async () => {
     vi.stubGlobal("fetch", vi.fn((input: string | URL | Request) => {
       const url = String(input);
       if (url.endsWith("stellar.toml")) {
@@ -175,16 +233,25 @@ describe("MoneyGram capability composite", () => {
     }));
     const provider = new MoneyGramTestnetProvider();
     const quote = await provider.getQuote(
-      { ...request, amount: "100", sourceAsset: "TEST_USDC" },
+      {
+        ...request,
+        amount: "100",
+        sourceAsset: "TEST_USDC",
+        payoutMethod: "CASH_PICKUP",
+      },
       new AbortController().signal,
     );
 
     expect(quote).toMatchObject({
       quoteKind: "MARKET_REFERENCE",
-      settlementMode: "FIAT_SIMULATED",
+      settlementMode: "PROVIDER_TEST",
+      payoutMethod: "CASH_PICKUP",
       fee: null,
     });
     expect(quote.rateSource).toContain("Coins.ph");
-    expect(quote.disclosures.join(" ")).toContain("bank payout is simulated");
+    expect(quote.disclosures.join(" ")).toContain("hosted SEP-24 flow");
+    expect(provider.supports({ ...request, sourceAsset: "TEST_USDC" })).toMatchObject({
+      supported: false,
+    });
   });
 });

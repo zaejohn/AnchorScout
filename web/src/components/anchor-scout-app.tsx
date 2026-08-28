@@ -47,8 +47,9 @@ import {
 
 type WalletSession = { address: string; walletId: string };
 type Balance = { asset?: string; balance: string; issuer?: string };
-type WorkflowStep = "wallet" | "request" | "compare" | "proof";
+type WorkflowStep = "request" | "compare" | "proof";
 type ProofStage = "route" | "payment" | "receipt" | "complete";
+type AppModal = "utility" | "history" | null;
 type HistoryRoute = {
   routeId: string;
   anchorId: string;
@@ -102,7 +103,11 @@ const routeRequestKey = (request: RouteRequest) =>
 const sourceAssetLabel = (asset: RouteRequest["sourceAsset"]) =>
   asset === "TEST_USDC" ? "Test USDC" : "XLM";
 const payoutLabel = (payout: RouteRequest["payoutMethod"]) =>
-  payout === "GCASH" ? "GCash" : "Bank transfer";
+  ({
+    BANK: "Bank transfer",
+    GCASH: "GCash",
+    CASH_PICKUP: "Cash pickup",
+  })[payout];
 
 export function AnchorScoutApp({
   contractsConfigured,
@@ -120,6 +125,9 @@ export function AnchorScoutApp({
   const [destination, setDestination] = useState("");
   const [xlmAmount, setXlmAmount] = useState("0.1");
   const [transfer, setTransfer] = useState<TransactionUpdate>(initialTransfer);
+  const [openModal, setOpenModal] = useState<AppModal>(null);
+  const [profileOpen, setProfileOpen] = useState(false);
+  const [wizardStep, setWizardStep] = useState<WorkflowStep>("request");
   const [routeRequest, setRouteRequest] = useState<RouteRequest>({
     amount: "100",
     sourceAsset: "XLM",
@@ -149,8 +157,15 @@ export function AnchorScoutApp({
   const seenEvents = useRef(new Set<string>());
   const eventPollInitialized = useRef(false);
   const executionLock = useRef(false);
+  const requestHeadingRef = useRef<HTMLHeadingElement>(null);
   const resultsHeadingRef = useRef<HTMLHeadingElement>(null);
   const proofHeadingRef = useRef<HTMLHeadingElement>(null);
+  const utilityDialogRef = useRef<HTMLDivElement>(null);
+  const historyDialogRef = useRef<HTMLDivElement>(null);
+  const profileTriggerRef = useRef<HTMLButtonElement>(null);
+  const profileMenuRef = useRef<HTMLDivElement>(null);
+  const utilityOpen = openModal === "utility";
+  const historyOpen = openModal === "history";
   const nativeBalance = balances.find(
     (balance) => balance.asset === "XLM",
   )?.balance;
@@ -247,6 +262,7 @@ export function AnchorScoutApp({
       );
       setCheckpoint(restored);
       if (!restored) return;
+      setWizardStep("proof");
       setProofStage(
         restored.receiptPending || restored.paymentHash
           ? "receipt"
@@ -382,6 +398,59 @@ export function AnchorScoutApp({
   }, []);
 
   useEffect(() => {
+    if (!openModal) return;
+    const previousActive =
+      document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const previousOverflow = document.body.style.overflow;
+    const dialogRef = openModal === "utility" ? utilityDialogRef : historyDialogRef;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        setOpenModal(null);
+      }
+    };
+    document.body.style.overflow = "hidden";
+    document.addEventListener("keydown", closeOnEscape);
+    dialogRef.current
+      ?.querySelector<HTMLElement>("input, button")
+      ?.focus();
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      document.removeEventListener("keydown", closeOnEscape);
+      previousActive?.focus();
+    };
+  }, [openModal]);
+
+  useEffect(() => {
+    if (!profileOpen) return;
+    const previousActive =
+      document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        setProfileOpen(false);
+      }
+    };
+    const closeOnPointerDown = (event: PointerEvent) => {
+      if (!(event.target instanceof Node)) return;
+      if (
+        !profileMenuRef.current?.contains(event.target) &&
+        !profileTriggerRef.current?.contains(event.target)
+      ) {
+        setProfileOpen(false);
+      }
+    };
+    document.addEventListener("keydown", closeOnEscape);
+    document.addEventListener("pointerdown", closeOnPointerDown);
+    profileMenuRef.current?.querySelector<HTMLElement>("button, a")?.focus();
+    return () => {
+      document.removeEventListener("keydown", closeOnEscape);
+      document.removeEventListener("pointerdown", closeOnPointerDown);
+      previousActive?.focus();
+    };
+  }, [profileOpen]);
+
+  useEffect(() => {
     if (!wallet || !contractsConfigured) return;
     let active = true;
     const poll = async () => {
@@ -438,26 +507,6 @@ export function AnchorScoutApp({
     ? `${searchedRequest.amount} ${sourceAssetLabel(searchedRequest.sourceAsset)} → ${searchedRequest.destinationCurrency} · ${payoutLabel(searchedRequest.payoutMethod)}`
     : requestSummary;
   const proofActive = Boolean(selected || checkpoint);
-  const currentWorkflowStep: WorkflowStep = proofActive
-    ? "proof"
-    : requestChanged
-      ? "request"
-      : quoteBusy || liveQuotes.length > 0
-      ? "compare"
-      : wallet
-        ? "request"
-        : "wallet";
-  const stepState = (step: WorkflowStep) => {
-    const complete = {
-      wallet: Boolean(wallet),
-      request: Boolean(searchedRequest && !requestChanged),
-      compare: Boolean(proofActive),
-      proof: proofStage === "complete",
-    }[step];
-    if (complete) return "complete";
-    if (step === currentWorkflowStep) return "current";
-    return "locked";
-  };
   const proofStageIndex = { route: 0, payment: 1, receipt: 2, complete: 3 }[
     proofStage
   ];
@@ -499,13 +548,16 @@ export function AnchorScoutApp({
   };
 
   const handleDisconnect = async () => {
+    setProfileOpen(false);
     setWalletBusy(true);
     await disconnectWallet().catch(() => undefined);
     setWallet(null);
     setBalances([]);
+    setBalanceError("");
     setHistory([]);
     setSelected(null);
     setCheckpoint(null);
+    setWizardStep("request");
     setProofStage("route");
     setExecution({
       phase: "idle",
@@ -557,6 +609,7 @@ export function AnchorScoutApp({
       setProviders(payload.providers);
       setSearchedRequest({ ...routeRequest });
       setSearchedAt(payload.searchedAt ?? new Date().toISOString());
+      setWizardStep("compare");
       track("quote_search", { routes: payload.quotes.length });
       window.setTimeout(() => resultsHeadingRef.current?.focus(), 0);
       if (payload.quotes.length === 0)
@@ -589,6 +642,23 @@ export function AnchorScoutApp({
         message: "Transfer details changed. Refresh routes before selecting one.",
       });
     }
+  };
+
+  const focusWizardStep = (step: WorkflowStep) => {
+    window.setTimeout(() => {
+      const heading =
+        step === "request"
+          ? requestHeadingRef.current
+          : step === "compare"
+            ? resultsHeadingRef.current
+            : proofHeadingRef.current;
+      heading?.focus();
+    }, 0);
+  };
+
+  const openWizardStep = (step: WorkflowStep) => {
+    setWizardStep(step);
+    focusWizardStep(step);
   };
 
   const handleExecute = async () => {
@@ -820,194 +890,158 @@ export function AnchorScoutApp({
             <span aria-hidden="true" />
             <span className="network-label">Stellar Testnet</span>
           </div>
-          {wallet && (
-            <a
-              className="address-chip"
-              href={stellarExpertUrl("account", wallet.address)}
-              target="_blank"
-              rel="noreferrer"
-              aria-label={`View wallet ${short(wallet.address, 4)}`}
-            >
-              {short(wallet.address, 4)} ↗
-            </a>
-          )}
         </div>
-        {wallet ? (
-          <button
-            className="button ghost small topbar-wallet-button"
-            onClick={handleDisconnect}
-            disabled={walletBusy}
-          >
-            Disconnect
-          </button>
-        ) : (
-          <button
-            className="button primary small topbar-wallet-button"
-            onClick={handleConnect}
-            disabled={walletBusy}
-          >
-            {walletBusy ? "Checking wallet…" : "Connect wallet"}
-          </button>
-        )}
-      </header>
-
-      <nav className="workflow-nav" aria-label="AnchorScout workflow">
-        {(
-          [
-            ["wallet", "Wallet", "Connect"],
-            ["request", "Request", "Details"],
-            ["compare", "Compare", "Routes"],
-            ["proof", "Sign", "Proof"],
-          ] as const
-        ).map(([id, label, description], index) => {
-          const state = stepState(id);
-          return (
-            <a
-              className={`workflow-nav-link ${state}`}
-              href={`#${id}`}
-              aria-current={
-                currentWorkflowStep === id ? "step" : undefined
-              }
-              key={id}
-            >
-              <span className="workflow-nav-number">0{index + 1}</span>
-              <span>
-                <strong>{label}</strong>
-                <small>{description}</small>
-              </span>
-            </a>
-          );
-        })}
-        <a className="workflow-nav-link workflow-nav-history" href="#history">
-          <span className="workflow-nav-number">H</span>
-          <span>
-            <strong>History</strong>
-            <small>Records</small>
-          </span>
-        </a>
-      </nav>
-
-      <section className="app-intro" aria-labelledby="app-title">
-        <div>
-          <p className="app-kicker">Stellar Testnet workspace</p>
-          <h1 id="app-title">Compare routes. Choose your best path.</h1>
-          <p className="app-intro-lede">
-            Compare live provider data, choose a route, then sign a transparent
-            Testnet proof from your own wallet.
-          </p>
-        </div>
-        <div className="app-intro-note" role="note">
-          <span className="intro-note-dot" aria-hidden="true" />
-          <div>
-            <strong>Wallet-controlled</strong>
-            <span>Quotes are read-only. You approve every transaction.</span>
-          </div>
-        </div>
-      </section>
-
-      <div className="app-flow">
-        <section
-          id="wallet"
-          className={`workflow-section wallet-section ${wallet ? "is-ready" : "is-current"}`}
-          aria-labelledby="wallet-title"
+        <button
+          type="button"
+          className="button ghost small topbar-utility-button"
+          onClick={() => setOpenModal("utility")}
+          aria-haspopup="dialog"
+          aria-expanded={utilityOpen}
+          aria-label="Open Send XLM utility"
         >
-          <div className="workflow-heading">
-            <div className="workflow-title">
-              <span className="step">01</span>
-              <div>
-                <p className="workflow-kicker">Connect wallet</p>
-                <h2 id="wallet-title">Start with your Testnet account</h2>
-              </div>
-            </div>
-            <span className={`workflow-status ${wallet ? "ready" : "pending"}`}>
-              {wallet ? "Ready" : "Required to sign"}
+          Send XLM
+        </button>
+        <button
+          type="button"
+          className="button ghost small topbar-history-button"
+          onClick={() => setOpenModal("history")}
+          aria-haspopup="dialog"
+          aria-expanded={historyOpen}
+          aria-label="Open route history"
+        >
+          History
+        </button>
+        <div className="topbar-profile">
+          <button
+            ref={profileTriggerRef}
+            type="button"
+            className={`profile-trigger ${wallet ? "is-connected" : "is-disconnected"}`}
+            onClick={() => setProfileOpen((open) => !open)}
+            aria-haspopup="dialog"
+            aria-expanded={profileOpen}
+            aria-label={wallet ? "Open connected wallet profile" : "Open wallet profile"}
+          >
+            <span className="profile-avatar" aria-hidden="true">
+              {wallet ? "✓" : "◎"}
             </span>
-          </div>
-
-          {!wallet ? (
-            <div className="wallet-connect-row">
-              <div className="wallet-orbit" aria-hidden="true">◎</div>
-              <div className="wallet-connect-copy">
-                <h3>Connect a Stellar wallet</h3>
-                <p>
-                  Freighter, xBull, and LOBSTR are supported. Your keys never
-                  leave the wallet.
-                </p>
-                <a
-                  href="https://www.freighter.app/"
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  Get Freighter ↗
-                </a>
-              </div>
-              <button
-                className="button secondary wallet-connect-button"
-                onClick={handleConnect}
-                disabled={walletBusy}
-              >
-                {walletBusy ? "Checking wallet…" : "Connect wallet"}
-              </button>
-            </div>
-          ) : (
-            <div className="wallet-connected-row">
-              <div className="wallet-identity">
-                <div className="wallet-avatar" aria-hidden="true">✓</div>
+            <span className="profile-trigger-copy">
+              <strong>{wallet ? "Wallet" : walletBusy ? "Checking…" : "Connect"}</strong>
+              <small>{wallet ? short(wallet.address, 4) : "Stellar Testnet"}</small>
+            </span>
+            <span className="profile-trigger-chevron" aria-hidden="true">
+              {profileOpen ? "⌃" : "⌄"}
+            </span>
+          </button>
+          {profileOpen && (
+            <div
+              ref={profileMenuRef}
+              className="profile-menu"
+              role="dialog"
+              aria-label="Wallet profile"
+            >
+              <div className="profile-menu-heading">
+                <span className="profile-menu-avatar" aria-hidden="true">
+                  {wallet ? "✓" : "◎"}
+                </span>
                 <div>
-                  <strong>Wallet connected</strong>
+                  <p className="profile-menu-kicker">Stellar Testnet</p>
+                  <strong>{wallet ? "Wallet connected" : "Connect your wallet"}</strong>
+                </div>
+              </div>
+              {wallet ? (
+                <>
                   <a
-                    className="wallet-address"
+                    className="profile-address"
                     href={stellarExpertUrl("account", wallet.address)}
                     target="_blank"
                     rel="noreferrer"
                   >
                     {wallet.address} ↗
                   </a>
-                  <p className="wallet-message">{walletMessage}</p>
-                </div>
-              </div>
-              <div className="balance-card compact">
-                <span>Available XLM</span>
-                <strong>
-                  {balanceBusy
-                    ? "Loading…"
-                    : nativeBalance
-                      ? `${Number(nativeBalance).toLocaleString(undefined, { maximumFractionDigits: 4 })} XLM`
-                      : "—"}
-                </strong>
-                <button
-                  className="text-button"
-                  onClick={() => refreshBalances(wallet.address)}
-                  disabled={balanceBusy}
-                >
-                  ↻ Refresh
-                </button>
-              </div>
+                  <div className="profile-balance">
+                    <div>
+                      <span>Available XLM</span>
+                      <strong>
+                        {balanceBusy
+                          ? "Loading…"
+                          : nativeBalance
+                            ? `${Number(nativeBalance).toLocaleString(undefined, { maximumFractionDigits: 4 })} XLM`
+                            : "—"}
+                      </strong>
+                    </div>
+                    <button
+                      type="button"
+                      className="text-button"
+                      onClick={() => refreshBalances(wallet.address)}
+                      disabled={balanceBusy}
+                    >
+                      ↻ Refresh
+                    </button>
+                  </div>
+                  {balanceError && <div className="notice error">{balanceError}</div>}
+                  {balances.filter((balance) => balance.asset !== "XLM").length > 0 && (
+                    <div className="profile-assets">
+                      {balances
+                        .filter((balance) => balance.asset !== "XLM")
+                        .slice(0, 3)
+                        .map((balance) => (
+                          <span key={`${balance.asset}:${balance.issuer}`}>
+                            <span>{balance.asset}</span>
+                            <strong>{Number(balance.balance).toLocaleString()}</strong>
+                          </span>
+                        ))}
+                    </div>
+                  )}
+                  <p className="profile-message">{walletMessage}</p>
+                  <button
+                    type="button"
+                    className="button ghost wide profile-disconnect-button"
+                    onClick={handleDisconnect}
+                    disabled={walletBusy}
+                  >
+                    Disconnect wallet
+                  </button>
+                </>
+              ) : (
+                <>
+                  <p className="profile-description">
+                    Freighter, xBull, and LOBSTR are supported. Your keys never leave the wallet.
+                  </p>
+                  <button
+                    type="button"
+                    className="button secondary wide"
+                    onClick={handleConnect}
+                    disabled={walletBusy}
+                  >
+                    {walletBusy ? "Checking wallet…" : "Connect wallet"}
+                  </button>
+                  <a
+                    className="profile-link"
+                    href="https://www.freighter.app/"
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    Get Freighter ↗
+                  </a>
+                  <p className="profile-message">{walletMessage}</p>
+                </>
+              )}
             </div>
           )}
-          {balanceError && <div className="notice error">{balanceError}</div>}
-          {wallet && (
-            <div className="asset-list wallet-assets">
-              {balances
-                .filter((balance) => balance.asset !== "XLM")
-                .slice(0, 3)
-                .map((balance) => (
-                  <span key={`${balance.asset}:${balance.issuer}`}>
-                    <span>{balance.asset}</span>
-                    <strong>{Number(balance.balance).toLocaleString()}</strong>
-                  </span>
-                ))}
-            </div>
-          )}
-        </section>
+        </div>
+      </header>
 
-        <section id="request" className="workflow-section request-section" aria-labelledby="request-title">
+      <div className="app-flow">
+        {wizardStep === "request" && (
+          <section id="request" className="workflow-section request-section" aria-labelledby="request-title">
           <div className="workflow-heading">
             <div className="workflow-title">
-              <span className="step">02</span>
+              <span className="step">01</span>
               <div>
                 <p className="workflow-kicker">Transfer details</p>
-                <h2 id="request-title">Where do you want to send money?</h2>
+                <h2 id="request-title" ref={requestHeadingRef} tabIndex={-1}>
+                  Where do you want to send money?
+                </h2>
               </div>
             </div>
             <span className="workflow-status info">
@@ -1043,13 +1077,19 @@ export function AnchorScoutApp({
                 <select
                   aria-label="Source asset"
                   value={routeRequest.sourceAsset}
-                  onChange={(event) =>
+                  onChange={(event) => {
+                    const sourceAsset = event.target
+                      .value as RouteRequest["sourceAsset"];
                     updateRouteRequest({
                       ...routeRequest,
-                      sourceAsset: event.target
-                        .value as RouteRequest["sourceAsset"],
-                    })
-                  }
+                      sourceAsset,
+                      payoutMethod:
+                        sourceAsset === "XLM" &&
+                        routeRequest.payoutMethod === "CASH_PICKUP"
+                          ? "BANK"
+                          : routeRequest.payoutMethod,
+                    });
+                  }}
                 >
                   <option value="XLM">XLM · Testnet</option>
                   <option value="TEST_USDC">Test USDC · Testnet</option>
@@ -1085,6 +1125,12 @@ export function AnchorScoutApp({
                 >
                   <option value="BANK">Bank transfer</option>
                   <option value="GCASH">GCash</option>
+                  <option
+                    value="CASH_PICKUP"
+                    disabled={routeRequest.sourceAsset !== "TEST_USDC"}
+                  >
+                    Cash pickup · MoneyGram Testnet
+                  </option>
                 </select>
               </label>
             </div>
@@ -1097,18 +1143,26 @@ export function AnchorScoutApp({
               {quoteError}
             </div>
           )}
-        </section>
+          <div className="wizard-step-footer">
+            <span className="wizard-step-progress">
+              <strong>Step 1</strong> of 3
+            </span>
+            <span>Next: compare live provider routes</span>
+          </div>
+          </section>
+        )}
 
-        <section
-          id="compare"
-          className="workflow-section results-section"
-          aria-labelledby="compare-title"
-          aria-live="polite"
-          aria-busy={quoteBusy}
-        >
+        {wizardStep === "compare" && (
+          <section
+            id="compare"
+            className="workflow-section results-section"
+            aria-labelledby="compare-title"
+            aria-live="polite"
+            aria-busy={quoteBusy}
+          >
           <div className="workflow-heading">
             <div className="workflow-title">
-              <span className="step">03</span>
+              <span className="step">02</span>
               <div>
                 <p className="workflow-kicker">Live comparison</p>
                 <h2 id="compare-title" ref={resultsHeadingRef} tabIndex={-1}>
@@ -1142,6 +1196,11 @@ export function AnchorScoutApp({
               </strong>
             )}
           </div>
+          {quoteError && (
+            <div className="notice error" role="alert">
+              {quoteError}
+            </div>
+          )}
           {requestChanged && (
             <div className="notice warning stale-results" role="status">
               <span>Transfer details changed. Refresh to compare the new request.</span>
@@ -1166,16 +1225,16 @@ export function AnchorScoutApp({
                   selected={selected?.quoteId === quote.quoteId}
                   checkpointActive={Boolean(checkpoint)}
                   stale={requestChanged}
-                    onSelect={() => {
-                      setSelected(quote);
-                      setProofStage("route");
-                      setExecution({
-                        phase: "idle",
-                        message:
-                          "Route selected. Review the Testnet proof before signing.",
-                      });
-                      window.setTimeout(() => proofHeadingRef.current?.focus(), 0);
-                    }}
+                  onSelect={() => {
+                    setSelected(quote);
+                    setProofStage("route");
+                    setExecution({
+                      phase: "idle",
+                      message:
+                        "Route selected. Review the Testnet proof before signing.",
+                    });
+                    openWizardStep("proof");
+                  }}
                 />
               ))}
             </div>
@@ -1183,20 +1242,40 @@ export function AnchorScoutApp({
             <div className="results-empty">
               <strong>Ready when you are.</strong>
               <span>Run a comparison to see live route data and provider evidence here.</span>
-              <a className="text-button" href="#request">Edit transfer details</a>
+              <button
+                type="button"
+                className="text-button"
+                onClick={() => openWizardStep("request")}
+              >
+                Edit transfer details
+              </button>
             </div>
           )}
           {providers.length > 0 && <ProviderHealth providers={providers} />}
-        </section>
+          <div className="wizard-step-actions">
+            <button
+              type="button"
+              className="button ghost"
+              onClick={() => openWizardStep("request")}
+            >
+              ← Back to details
+            </button>
+            <span>
+              <strong>Step 2 of 3</strong> · Select a route to continue
+            </span>
+          </div>
+          </section>
+        )}
 
-        <section
-          id="proof"
-          className={`workflow-section proof-section ${proofActive ? "is-active" : "is-locked"}`}
-          aria-labelledby="proof-title"
-        >
+        {wizardStep === "proof" && (
+          <section
+            id="proof"
+            className={`workflow-section proof-section ${proofActive ? "is-active" : "is-locked"}`}
+            aria-labelledby="proof-title"
+          >
           <div className="workflow-heading">
             <div className="workflow-title">
-              <span className="step">04</span>
+              <span className="step">03</span>
               <div>
                 <p className="workflow-kicker">Wallet-authorized proof</p>
                 <h2 id="proof-title" ref={proofHeadingRef} tabIndex={-1}>
@@ -1216,7 +1295,13 @@ export function AnchorScoutApp({
                   payment, and the final receipt.
                 </p>
               </div>
-              <a className="text-button" href="#compare">See available routes</a>
+              <button
+                type="button"
+                className="text-button"
+                onClick={() => openWizardStep("compare")}
+              >
+                See available routes
+              </button>
             </div>
           ) : (
             <>
@@ -1262,6 +1347,15 @@ export function AnchorScoutApp({
                   );
                 })}
               </ol>
+              {proofStage === "complete" && (
+                <div className="wizard-complete" role="status">
+                  <span className="wizard-complete-icon" aria-hidden="true">✓</span>
+                  <div>
+                    <strong>Proof complete</strong>
+                    <span>Route, payment, and receipt evidence are confirmed on Testnet.</span>
+                  </div>
+                </div>
+              )}
               {!contractsConfigured && (
                 <div className="notice warning">
                   Contract actions unlock after the Testnet deployment IDs are configured.
@@ -1298,33 +1392,97 @@ export function AnchorScoutApp({
                         phase: "idle",
                         message: "Select an externally sourced route to start the Testnet proof.",
                       });
+                      openWizardStep("compare");
                     }}
                   >
-                    Start another comparison
+                    Choose another route
+                  </button>
+                )}
+                {proofStage !== "complete" && selected && !checkpoint && (
+                  <button
+                    type="button"
+                    className="button ghost"
+                    onClick={() => {
+                      setSelected(null);
+                      setProofStage("route");
+                      setExecution({
+                        phase: "idle",
+                        message: "Select an externally sourced route to start the Testnet proof.",
+                      });
+                      openWizardStep("compare");
+                    }}
+                  >
+                    ← Back to routes
                   </button>
                 )}
               </div>
+              <div className="wizard-step-footer">
+                <span className="wizard-step-progress">
+                  <strong>Step 3</strong> of 3
+                </span>
+                <span>{proofStage === "complete" ? "All steps complete" : "Authorize the proof from your wallet"}</span>
+              </div>
               <p className="fine-print">
                 Every signature stays in your wallet. The confirmed hashes and
-                contract records remain available in your history below.
+                contract records remain available from History in the navbar.
               </p>
             </>
           )}
-        </section>
+          </section>
+        )}
+      </div>
 
-        <details className="utility-disclosure" id="utility">
-          <summary>
-            <span>
-              <strong>Send XLM utility</strong>
-              <small>Optional classic Stellar transfer</small>
-            </span>
-            <span className="utility-summary-action">Open tool</span>
-          </summary>
-          <div className="utility-content">
-            <div className="utility-copy">
-              <p className="workflow-kicker">Developer utility</p>
-              <h2>Send XLM</h2>
-              <p>Use this separate form to test a classic Stellar payment.</p>
+      <footer>
+        <div className="brand">
+          <span className="brand-mark">
+            <Image
+              className="brand-logo"
+              src="/logo.png"
+              alt=""
+              width={42}
+              height={42}
+            />
+          </span>
+          <span>AnchorScout</span>
+        </div>
+        <p>Real provider data, Testnet proof settlement. Not a production payout service.</p>
+        <a href="https://github.com/stellar" target="_blank" rel="noreferrer">
+          Built on Stellar ↗
+        </a>
+      </footer>
+
+      {utilityOpen && (
+        <div
+          className="utility-modal-backdrop"
+          role="presentation"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) setOpenModal(null);
+          }}
+        >
+          <div
+            ref={utilityDialogRef}
+            className="utility-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="utility-modal-title"
+            aria-describedby="utility-modal-description"
+          >
+            <div className="utility-modal-header">
+              <div>
+                <p className="workflow-kicker">Developer utility</p>
+                <h2 id="utility-modal-title">Send XLM</h2>
+                <p id="utility-modal-description">
+                  Send a classic Stellar payment without leaving your route comparison.
+                </p>
+              </div>
+              <button
+                type="button"
+                className="utility-modal-close"
+                onClick={() => setOpenModal(null)}
+                aria-label="Close Send XLM utility"
+              >
+                ×
+              </button>
             </div>
             <form onSubmit={handleTransfer} className="transfer-form">
               <label>
@@ -1363,103 +1521,129 @@ export function AnchorScoutApp({
               </button>
             </form>
           </div>
-        </details>
-
-        <section className="workflow-section history-section" id="history" aria-labelledby="history-title">
-          <div className="workflow-heading">
-            <div className="workflow-title">
-              <span className="step">H</span>
+        </div>
+      )}
+      {historyOpen && (
+        <div
+          className="utility-modal-backdrop history-modal-backdrop"
+          role="presentation"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) setOpenModal(null);
+          }}
+        >
+          <div
+            ref={historyDialogRef}
+            className="utility-modal history-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="history-modal-title"
+            aria-describedby="history-modal-description"
+          >
+            <div className="utility-modal-header">
               <div>
                 <p className="workflow-kicker">On-chain records</p>
-                <h2 id="history-title">Your route history</h2>
+                <h2 id="history-modal-title">Your route history</h2>
+                <p id="history-modal-description">
+                  Review durable Route Registry records and their Stellar transaction evidence.
+                </p>
+              </div>
+              <div className="history-modal-actions">
+                {wallet && (
+                  <button
+                    type="button"
+                    className="button ghost small"
+                    onClick={() => refreshHistory(wallet.address)}
+                    disabled={historyBusy}
+                  >
+                    {historyBusy ? "Refreshing…" : "Refresh"}
+                  </button>
+                )}
+                <button
+                  type="button"
+                  className="utility-modal-close"
+                  onClick={() => setOpenModal(null)}
+                  aria-label="Close route history"
+                >
+                  ×
+                </button>
               </div>
             </div>
-            {wallet && (
-              <button
-                className="button ghost small"
-                onClick={() => refreshHistory(wallet.address)}
-                disabled={historyBusy}
-              >
-                {historyBusy ? "Refreshing…" : "Refresh history"}
-              </button>
+            {!wallet ? (
+              <div className="history-empty compact-empty">
+                <span>Connect a wallet to load its durable Route Registry records.</span>
+                <button
+                  type="button"
+                  className="text-button"
+                  onClick={() => {
+                    setOpenModal(null);
+                    setProfileOpen(true);
+                  }}
+                >
+                  Connect wallet
+                </button>
+              </div>
+            ) : historyBusy && history.length === 0 ? (
+              <div className="history-empty compact-empty">Reading contract state…</div>
+            ) : historyError ? (
+              <div className="notice error">{historyError}</div>
+            ) : history.length === 0 ? (
+              <div className="history-empty compact-empty">
+                <span>No routes recorded for this wallet yet.</span>
+                <button
+                  type="button"
+                  className="text-button"
+                  onClick={() => {
+                    setOpenModal(null);
+                    openWizardStep("request");
+                  }}
+                >
+                  Start a comparison
+                </button>
+              </div>
+            ) : (
+              <div className="history-list">
+                {history.map((route) => (
+                  <article key={route.routeId}>
+                    <div>
+                      <span className={`status-dot ${route.status.toLowerCase()}`} />
+                      <strong>{route.anchorId}</strong>
+                      <small>{new Date(route.selectedAt * 1000).toLocaleString()}</small>
+                    </div>
+                    <div>
+                      <strong>{route.sourceAmount} {route.sourceAsset}</strong>
+                      <span>→</span>
+                      <strong>{peso.format(Number(route.destinationAmount))}</strong>
+                    </div>
+                    <div>
+                      <span className={`status-badge ${route.status.toLowerCase()}`}>
+                        {route.status}
+                      </span>
+                      {route.routeTransactionHash && (
+                        <a href={stellarExpertUrl("tx", route.routeTransactionHash)} target="_blank" rel="noreferrer">
+                          Route tx ↗
+                        </a>
+                      )}
+                      {route.paymentHash && (
+                        <a href={stellarExpertUrl("tx", route.paymentHash)} target="_blank" rel="noreferrer">
+                          Payment {short(route.paymentHash, 8)} ↗
+                        </a>
+                      )}
+                      {route.receiptTransactionHash && (
+                        <a href={stellarExpertUrl("tx", route.receiptTransactionHash)} target="_blank" rel="noreferrer">
+                          Receipt tx ↗
+                        </a>
+                      )}
+                      <span title={route.receiptId ?? undefined}>
+                        {route.receiptId ? `Receipt ${short(route.receiptId, 8)}` : "Receipt pending"}
+                      </span>
+                    </div>
+                  </article>
+                ))}
+              </div>
             )}
           </div>
-          {!wallet ? (
-            <div className="history-empty compact-empty">
-              <span>Connect a wallet to load its durable Route Registry records.</span>
-              <a className="text-button" href="#wallet">Connect wallet</a>
-            </div>
-          ) : historyBusy && history.length === 0 ? (
-            <div className="history-empty compact-empty">Reading contract state…</div>
-          ) : historyError ? (
-            <div className="notice error">{historyError}</div>
-          ) : history.length === 0 ? (
-            <div className="history-empty compact-empty">
-              <span>No routes recorded for this wallet yet.</span>
-              <a className="text-button" href="#request">Start a comparison</a>
-            </div>
-          ) : (
-            <div className="history-list">
-              {history.map((route) => (
-                <article key={route.routeId}>
-                  <div>
-                    <span className={`status-dot ${route.status.toLowerCase()}`} />
-                    <strong>{route.anchorId}</strong>
-                    <small>{new Date(route.selectedAt * 1000).toLocaleString()}</small>
-                  </div>
-                  <div>
-                    <strong>{route.sourceAmount} {route.sourceAsset}</strong>
-                    <span>→</span>
-                    <strong>{peso.format(Number(route.destinationAmount))}</strong>
-                  </div>
-                  <div>
-                    <span className={`status-badge ${route.status.toLowerCase()}`}>
-                      {route.status}
-                    </span>
-                    {route.routeTransactionHash && (
-                      <a href={stellarExpertUrl("tx", route.routeTransactionHash)} target="_blank" rel="noreferrer">
-                        Route tx ↗
-                      </a>
-                    )}
-                    {route.paymentHash && (
-                      <a href={stellarExpertUrl("tx", route.paymentHash)} target="_blank" rel="noreferrer">
-                        Payment {short(route.paymentHash, 8)} ↗
-                      </a>
-                    )}
-                    {route.receiptTransactionHash && (
-                      <a href={stellarExpertUrl("tx", route.receiptTransactionHash)} target="_blank" rel="noreferrer">
-                        Receipt tx ↗
-                      </a>
-                    )}
-                    <span title={route.receiptId ?? undefined}>
-                      {route.receiptId ? `Receipt ${short(route.receiptId, 8)}` : "Receipt pending"}
-                    </span>
-                  </div>
-                </article>
-              ))}
-            </div>
-          )}
-        </section>
-      </div>
-
-      <footer>
-        <div className="brand">
-          <span className="brand-mark">
-            <Image
-              className="brand-logo"
-              src="/logo.png"
-              alt=""
-              width={42}
-              height={42}
-            />
-          </span>
-          <span>AnchorScout</span>
         </div>
-        <p>Real provider data, Testnet proof settlement. Not a production payout service.</p>
-        <a href="https://github.com/stellar" target="_blank" rel="noreferrer">
-          Built on Stellar ↗
-        </a>
-      </footer>
+      )}
     </main>
   );
 }
@@ -1512,9 +1696,11 @@ function QuoteCard({
         {peso.format(Number(quote.destinationAmount))}
       </strong>
       <span className="amount-qualifier">
-        {quote.fee === null
-          ? "gross reference; payout fee not deducted"
-          : "after reported payout fee"}
+        {quote.destinationAmountIncludesFees
+          ? "provider-reported payout after quoted deductions"
+          : quote.fee === null
+            ? "gross reference; payout fee not deducted"
+            : "after reported payout fee"}
       </span>
       <dl>
         <div>
@@ -1593,6 +1779,9 @@ function ProviderHealth({ providers }: { providers: ProviderResult[] }) {
             <span>
               {provider.providerName}
               {provider.status === "unsupported" ? " · not compatible" : ""}
+              {provider.status === "ok" && provider.quoteCount
+                ? ` · ${provider.quoteCount} ${provider.quoteCount === 1 ? "route" : "routes"}`
+                : ""}
             </span>
             {provider.message && <small>{provider.message}</small>}
           </div>

@@ -8,6 +8,7 @@ import type {
   RawProviderQuote,
   RouteRequest,
 } from "../types";
+import { UnsupportedProviderRouteError } from "../provider-errors";
 import { getCoinsMarketReference } from "./coins-ph";
 
 const MONEYGRAM_HOME = "https://extmgxanchor.moneygram.com";
@@ -33,7 +34,19 @@ export class MoneyGramTestnetProvider implements AnchorProvider {
   readonly name = "MoneyGram Ramps Testnet";
 
   supports(request: RouteRequest) {
-    return request.sourceAsset === "TEST_USDC";
+    if (request.sourceAsset !== "TEST_USDC") {
+      return {
+        supported: false,
+        message: "MoneyGram Testnet cash pickup requires Test USDC",
+      };
+    }
+    if (request.payoutMethod !== "CASH_PICKUP") {
+      return {
+        supported: false,
+        message: "MoneyGram's Stellar route is cash pickup, not bank or GCash",
+      };
+    }
+    return true;
   }
 
   async getQuote(
@@ -62,7 +75,9 @@ export class MoneyGramTestnetProvider implements AnchorProvider {
     const amount = Number(request.amount);
     const limits = info.withdraw.USDC;
     if (!limits.enabled || amount < limits.min_amount || amount > limits.max_amount) {
-      throw new Error("Amount is outside MoneyGram Testnet withdrawal limits");
+      throw new UnsupportedProviderRouteError(
+        `Amount is outside MoneyGram Testnet cash-pickup limits (${limits.min_amount}-${limits.max_amount} USDC)`,
+      );
     }
 
     const quoteId = createHash("sha256")
@@ -74,22 +89,24 @@ export class MoneyGramTestnetProvider implements AnchorProvider {
 
     return {
       anchorId: this.id,
-      anchorName: "MoneyGram Testnet capability · fiat simulated",
+      anchorName: "MoneyGram Testnet cash pickup",
       quoteId: `capability_${quoteId}`,
       sourceAsset: request.sourceAsset,
       sourceAmount: amount,
       destinationCurrency: request.destinationCurrency,
       destinationAmount: market.destinationAmount,
+      destinationAmountIncludesFees: false,
       exchangeRate: market.exchangeRate,
       fee: null,
       feeCurrency: null,
-      payoutMethod: request.payoutMethod,
+      payoutMethod: "CASH_PICKUP",
       estimatedMinutes: null,
-      estimatedSettlement: "MoneyGram hosted cash flow; bank/GCash payout simulated",
+      estimatedSettlement:
+        "Interactive MoneyGram cash pickup; timing appears after KYC and location selection",
       expiresAt: new Date(Date.now() + 60_000).toISOString(),
       available: true,
       quoteKind: "MARKET_REFERENCE",
-      settlementMode: "FIAT_SIMULATED",
+      settlementMode: "PROVIDER_TEST",
       rateSource: `Coins.ph live ${market.symbol} order book observed ${new Date(market.observedAt).toISOString()}`,
       feeSource: info.fee?.enabled
         ? "Shown inside MoneyGram's authenticated hosted flow"
@@ -97,10 +114,10 @@ export class MoneyGramTestnetProvider implements AnchorProvider {
       availabilitySource: `Live MoneyGram Testnet SEP-1 + SEP-24 info (${limits.min_amount}-${limits.max_amount} USDC)`,
       providerUrl: "https://xramps.moneygram.com/ops/dev/stellar",
       disclosures: [
-        "MoneyGram supplies the live Testnet USDC capability; it does not quote PHP through SEP-38.",
+        "MoneyGram supplies the live Testnet USDC cash-pickup capability; it does not quote PHP through SEP-38.",
         "The displayed PHP rate comes from Coins.ph live market data, not MoneyGram.",
-        `The requested ${request.payoutMethod === "BANK" ? "bank" : "GCash"} payout is simulated; MoneyGram's public Testnet route is a hosted cash flow.`,
-        "No MoneyGram production payout or KYC session is started.",
+        "Cash pickup is completed through MoneyGram's hosted SEP-24 flow; AnchorScout does not start that KYC session during the Testnet proof.",
+        "No MoneyGram production payout is initiated.",
       ],
     };
   }

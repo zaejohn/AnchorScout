@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { normalizeQuote } from "./normalize";
+import { UnsupportedProviderRouteError } from "./provider-errors";
 import { rankQuotes } from "./ranking";
 import { searchQuotes } from "./service";
 import type { AnchorProvider, RawProviderQuote, RouteRequest } from "./types";
@@ -45,7 +46,10 @@ function raw(overrides: Partial<RawProviderQuote> = {}): RawProviderQuote {
 describe("route validation and normalization", () => {
   it("rejects invalid amounts and route enums", () => {
     expect(parseRouteRequest({ ...request, amount: "0" }).success).toBe(false);
-    expect(parseRouteRequest({ ...request, payoutMethod: "CASH" }).success).toBe(false);
+    expect(parseRouteRequest({ ...request, payoutMethod: "CARD" }).success).toBe(false);
+    expect(
+      parseRouteRequest({ ...request, payoutMethod: "CASH_PICKUP" }).success,
+    ).toBe(true);
   });
 
   it("normalizes valid provider data and marks expired quotes", () => {
@@ -121,6 +125,31 @@ describe("provider isolation", () => {
     expect(JSON.stringify(result)).not.toContain("secret failure");
   });
 
+  it("normalizes every real quote returned by an aggregator", async () => {
+    const aggregator: AnchorProvider = {
+      id: "aggregator",
+      name: "Aggregator",
+      getQuotes: async () => [
+        raw({ anchorId: "provider-a", anchorName: "Provider A" }),
+        raw({
+          anchorId: "provider-b",
+          anchorName: "Provider B",
+          quoteId: "quote-b",
+          destinationAmount: "5710",
+        }),
+      ],
+    };
+    const result = await searchQuotes(request, [aggregator], { now });
+    expect(result.quotes.map((quote) => quote.anchorId)).toEqual([
+      "provider-b",
+      "provider-a",
+    ]);
+    expect(result.providers[0]).toMatchObject({
+      status: "ok",
+      quoteCount: 2,
+    });
+  });
+
   it("bounds providers that ignore abort signals", async () => {
     const stalled: AnchorProvider = {
       id: "stalled",
@@ -133,6 +162,26 @@ describe("provider isolation", () => {
     });
     expect(result.quotes).toHaveLength(0);
     expect(result.providers[0]).toMatchObject({ status: "timed_out" });
+  });
+
+  it("reports dynamic no-route responses as unsupported without inventing a card", async () => {
+    const unavailable: AnchorProvider = {
+      id: "dynamic",
+      name: "Dynamic provider",
+      getQuote: async () => {
+        throw new UnsupportedProviderRouteError(
+          "No live bank route for this corridor",
+        );
+      },
+    };
+    const result = await searchQuotes(request, [unavailable], { now });
+    expect(result.quotes).toHaveLength(0);
+    expect(result.providers[0]).toEqual({
+      providerId: "dynamic",
+      providerName: "Dynamic provider",
+      status: "unsupported",
+      message: "No live bank route for this corridor",
+    });
   });
 
   it.each([

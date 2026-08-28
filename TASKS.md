@@ -22,6 +22,8 @@
 - [x] Verify the desktop and 390 px mobile route flow in-browser with no horizontal overflow
 - [x] Add the public responsive landing page at `/` and preserve the complete route-comparison workflow at `/app`
 - [x] Refactor `/app` into a guided wallet → request → compare → sign workflow with accessible navigation, progressive disclosure, stale-quote protection, and responsive proof/history states
+- [x] Convert the route workflow into a sequential three-step wizard with focused step transitions, guarded navigation, back actions, and a confirmed completion state
+- [x] Add capability-driven multi-quote providers, explicit MoneyGram cash pickup, bearer-protected and durably rate-limited firm Coins.ph registration, and explicit-Testnet-gated Onramper routes without synthetic provider cards
 - [x] Record public network evidence and maintain 20 meaningful implementation commits before final documentation
 - [x] Add authenticated cron-job.org endpoint, durable Postgres 17-minute scheduler, fenced leases, permanently reserved private profiles, resumable signed transaction checkpoints, retries and safe Google Form submission
 - [x] Reuse shared provider/transaction code for real Friendbot, USDC trustline/live swap, route selection, XLM proof and atomic settlement; keep unavailable fiat settlement explicitly simulated
