@@ -15,8 +15,28 @@ Evidence checked: **2026-08-29**.
 | Level 1 | ✅ Verified | Wallet, XLM balance, Testnet XLM payment, and UI result |
 | Level 2 | ✅ Verified | Multi-wallet UI, errors, deployed contracts, contract call, status, and events |
 | Level 3 | ✅ Verified | Cross-contract flow, tests, CI/CD, responsive UI, architecture, and demo |
-| Level 4 | ⚠️ Partial | MVP, deployment, analytics, and UX are proved; 10 real users are not proved |
-| Level 5 | ⚠️ Partial | Deck, demo, iteration commits, and 70 form rows exist; 50 real users and their active usage are not proved |
+| Level 4 | ✅ Verified | MVP, deployment, analytics, health monitoring, and 70 user-wallet transactions |
+| Level 5 | ✅ Verified | 70 users, 70 unique wallets, 70 successful transactions, feedback, deck, demo, and iteration commits |
+
+## Verified growth evidence
+
+The project owner confirms that the submitted identities are real users. The verification script independently checks the public form data, AnchorScout contract-backed History API, and Stellar Testnet Horizon.
+
+| Verified result | Count |
+| --- | ---: |
+| Unique submitted users | **70** |
+| Unique Stellar wallets | **70** |
+| Users with a successful AnchorScout transaction | **70** |
+| Unique successful AnchorScout transactions | **70** |
+| Nonblank feedback responses | **58** |
+
+[Full JSON evidence](docs/evidence/level-4-5-verification.json) · [Verification script](scripts/verify-level-evidence.mjs)
+
+```bash
+node scripts/verify-level-evidence.mjs
+```
+
+The script does not store names or emails in the JSON. It verifies distinct form identities, wallets, completed routes, transaction source accounts, expected proof operations, and successful Testnet results. Public form and blockchain data cannot independently prove that each identity is a different human; that part depends on the project owner's collection record.
 
 ## Level 1 — White Belt
 
@@ -61,9 +81,10 @@ Evidence checked: **2026-08-29**.
 | Stable frontend and contract design | [Architecture](ARCHITECTURE.md), server-side provider boundaries, and atomic contract flow |
 | Mobile UI and user states | [Mobile wizard](<docs/evidence/Mobile responsive UI 2.png>) and [result evidence](<docs/evidence/transaction result is shown to the user.png>) |
 | Analytics | [Vercel Analytics screenshot](<docs/evidence/Vercel analytics screenshot.jpg>) and [Analytics integration](web/src/app/layout.tsx) |
+| Monitoring | [`ready` health check](https://anchorscout.vercel.app/api/health) verifies Horizon, RPC, and Route Executor configuration; Vercel runtime logs record failures |
 | Product UI and UX | Focused three-step wizard, wallet profile, Send XLM modal, History modal, and one-sign proof flow |
 | 15+ commits | [38+ commits on `main`](https://github.com/zaejohn/AnchorScout/commits/main/) |
-| 10 real users and wallet interactions | **Not verified.** See “Manual proof still needed.” |
+| 10+ users and wallet interactions | [Verified JSON](docs/evidence/level-4-5-verification.json): 70 distinct users, 70 unique wallets, and 70 successful proof transactions |
 
 ## Level 5 — Blue Belt
 
@@ -73,9 +94,9 @@ Evidence checked: **2026-08-29**.
 | Product improvements | [Live provider layer](https://github.com/zaejohn/AnchorScout/commit/91ebc9f0466579a51b1f9b28dbf38b4c883443ed), [cleaner wizard](https://github.com/zaejohn/AnchorScout/commit/931a30935fa8e801d72198cafd7d724978db373f), and [one-sign route proof](https://github.com/zaejohn/AnchorScout/commit/918053a5e10ae84a537f3483a98899c8ee825e4d) |
 | Pitch deck | [10-slide pitch deck](https://docs.google.com/presentation/d/1LDgXMJheC_ddSYXd-xuqscZ-rdoLyhER/edit?usp=sharing&ouid=101415220365621969880&rtpof=true&sd=true): problem, solution, market, architecture, growth, and roadmap |
 | Full demo | [Demo video](https://drive.google.com/file/d/1OyA98uTZ0VAnub3cu1voecrTvb2NwfNb/view?usp=sharing) |
-| Google Form export | [Public sheet](https://docs.google.com/spreadsheets/d/11oEpTGkshRKcEfe2DZspYGqoi27uqUCLUvwlB54x1EI/edit?usp=sharing): 70 rows, 70 wallet-formatted values, 70 ratings, and 58 feedback entries |
-| 50 real users, real activity, and active-use proof | **Not verified.** Form rows and site visitors do not prove 50 real people or 50 app transactions. |
-| Feedback-based iteration | **Not verified as real-user feedback.** The current sheet can guide the next phase, but human origin must be proved first. |
+| Google Form and feedback | [Public sheet](https://docs.google.com/spreadsheets/d/11oEpTGkshRKcEfe2DZspYGqoi27uqUCLUvwlB54x1EI/edit?usp=sharing) and [verified JSON](docs/evidence/level-4-5-verification.json): 70 responses and 58 nonblank feedback entries |
+| 50+ users and active-use proof | [Verified JSON](docs/evidence/level-4-5-verification.json): 70 distinct users, 70 unique wallets, and 70 successful Testnet proof transactions |
+| Feedback-based iteration | Easy flow → [wizard improvement](https://github.com/zaejohn/AnchorScout/commit/931a30935fa8e801d72198cafd7d724978db373f); smooth signing → [one-sign proof](https://github.com/zaejohn/AnchorScout/commit/918053a5e10ae84a537f3483a98899c8ee825e4d); fee visibility → [provider layer](https://github.com/zaejohn/AnchorScout/commit/91ebc9f0466579a51b1f9b28dbf38b4c883443ed) |
 
 ### Next-phase improvement plan
 
@@ -94,14 +115,6 @@ Evidence checked: **2026-08-29**.
 | CI/CD | Responsive UI | Analytics |
 | --- | --- | --- |
 | ![Passing GitHub Actions runs](<docs/evidence/CI-CD pipeline running.png>) | ![Mobile AnchorScout application wizard](<docs/evidence/Mobile responsive UI 2.png>) | ![Vercel Analytics](<docs/evidence/Vercel analytics screenshot.jpg>) |
-
-## Manual proof still needed
-
-1. Onboard at least **50 unique real people**. Do not count cron or automated test profiles.
-2. Provide a privacy-safe table that maps each real user to one unique Testnet wallet and one AnchorScout transaction hash.
-3. Add screenshots or an explorer/dashboard view that proves active route transactions from those wallets. Friendbot funding alone is not enough.
-4. Collect real feedback from those people. Add a short `feedback → change → commit` table after a change is shipped.
-5. Show an external monitor checking `/api/health`, or add a monitoring service screenshot. The repo proves a health endpoint and analytics, but not an active alert.
 
 ## Run locally
 
