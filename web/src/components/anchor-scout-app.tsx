@@ -3,7 +3,6 @@
 import Link from "next/link";
 import Image from "next/image";
 import { track } from "@vercel/analytics";
-import { Buffer } from "buffer";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { isSelectableQuote } from "@/lib/anchors/ranking";
@@ -14,19 +13,14 @@ import type {
   RouteRequest,
 } from "@/lib/anchors/types";
 import {
-  findConfirmedXlmTransaction,
   sendXlm,
-  TerminalPaymentFailedError,
 } from "@/lib/stellar/classic";
 import {
-  PROOF_PAYMENT_DESTINATION,
   stellarExpertUrl,
-  stellarHorizonTransactionUrl,
 } from "@/lib/stellar/config";
 import {
-  createRoute,
   createRouteId,
-  recordSettlement,
+  executeRoute,
 } from "@/lib/stellar/contracts";
 import {
   classifyWalletError,
@@ -48,7 +42,7 @@ import {
 type WalletSession = { address: string; walletId: string };
 type Balance = { asset?: string; balance: string; issuer?: string };
 type WorkflowStep = "request" | "compare" | "proof";
-type ProofStage = "route" | "payment" | "receipt" | "complete";
+type ProofStage = "authorize" | "complete";
 type AppModal = "utility" | "history" | null;
 type FlowToast = {
   tone: "success" | "error";
@@ -66,11 +60,10 @@ type HistoryRoute = {
   selectedAt: number;
   status: string;
   network: "TESTNET";
-  paymentHash: string | null;
-  paymentStatus: "SUCCESS" | "FAILED" | "NOT_FOUND" | "UNAVAILABLE" | null;
+  transactionHash: string | null;
+  transactionStatus: "SUCCESS" | "FAILED" | "NOT_FOUND" | "UNAVAILABLE" | null;
+  transactionKind: "ATOMIC_PROOF" | "LEGACY_PAYMENT" | "LEGACY_RECEIPT" | "ROUTE_SELECTION" | null;
   receiptId: string | null;
-  routeTransactionHash: string | null;
-  receiptTransactionHash: string | null;
 };
 
 const initialTransfer: TransactionUpdate = {
@@ -154,7 +147,7 @@ export function AnchorScoutApp({
     phase: "idle",
     message: "Select an externally sourced route to start the Testnet proof.",
   });
-  const [proofStage, setProofStage] = useState<ProofStage>("route");
+  const [proofStage, setProofStage] = useState<ProofStage>("authorize");
   const [flowToast, setFlowToast] = useState<FlowToast | null>(null);
   const [checkpoint, setCheckpoint] = useState<ProofCheckpoint | null>(null);
   const [history, setHistory] = useState<HistoryRoute[]>([]);
@@ -264,28 +257,20 @@ export function AnchorScoutApp({
   useEffect(() => {
     if (!wallet) return;
     const timer = window.setTimeout(() => {
-      const restored = parseProofCheckpoint(
-        localStorage.getItem(PROOF_CHECKPOINT_KEY),
-        wallet.address,
-      );
+      const stored = localStorage.getItem(PROOF_CHECKPOINT_KEY);
+      const restored = parseProofCheckpoint(stored, wallet.address);
+      if (!restored?.transactionHash) {
+        if (stored) localStorage.removeItem(PROOF_CHECKPOINT_KEY);
+        setCheckpoint(null);
+        return;
+      }
       setCheckpoint(restored);
-      if (!restored) return;
       setWizardStep("proof");
-      setProofStage(
-        restored.receiptPending || restored.paymentHash
-          ? "receipt"
-          : restored.paymentPending || restored.routeTransactionHash
-            ? "payment"
-            : "route",
-      );
+      setProofStage("authorize");
       setExecution({
         phase: "pending",
-        message:
-          "Checking the saved proof before any transaction can be submitted again.",
-        hash:
-          restored.receiptTransactionHash ??
-          restored.paymentHash ??
-          restored.routeTransactionHash,
+        message: "Checking the submitted transaction before anything can be retried.",
+        hash: restored.transactionHash,
       });
     }, 0);
     return () => window.clearTimeout(timer);
@@ -300,47 +285,50 @@ export function AnchorScoutApp({
     const timer = window.setTimeout(() => {
       if (savedRoute.status === "COMPLETED" || savedRoute.status === "FAILED") {
         persistCheckpoint(null);
-        setProofStage(savedRoute.status === "COMPLETED" ? "complete" : "route");
+        setProofStage(savedRoute.status === "COMPLETED" ? "complete" : "authorize");
         setExecution({
           phase: savedRoute.status === "COMPLETED" ? "confirmed" : "failed",
           message:
             savedRoute.status === "COMPLETED"
-              ? "Saved settlement reconciled from contract state."
-              : "The saved route is finalized as failed; no payment will be repeated.",
-          hash: checkpoint.receiptTransactionHash ?? checkpoint.paymentHash,
+              ? checkpoint.legacy
+                ? "The earlier multi-step route was reconciled. History shows one canonical legacy transaction."
+                : "Transaction confirmed and reconciled from contract state."
+              : "The atomic transaction failed; no route state was saved.",
+          hash: checkpoint.transactionHash,
         });
         setFlowToast(
           savedRoute.status === "COMPLETED"
             ? {
                 tone: "success",
                 title: "Proof completed",
-                message: "Your route and receipt are confirmed on Stellar Testnet.",
+                message: checkpoint.legacy
+                  ? "Your earlier route was recovered without submitting another transaction."
+                  : "Your route proof is confirmed in one Stellar Testnet transaction.",
               }
             : {
                 tone: "error",
                 title: "Proof failed",
-                message: "The saved route was finalized without repeating the payment.",
+                message: "The transaction failed without leaving partial route state.",
               },
         );
         return;
       }
-      if (checkpoint.receiptPending) {
+      if (checkpoint.legacy) {
+        persistCheckpoint(null);
+        setSelected(null);
+        setProofStage("authorize");
+        setWizardStep("compare");
         setExecution({
-          phase: "pending",
-          message:
-            "The submitted receipt is still pending. AnchorScout will not submit another receipt.",
-          hash: checkpoint.receiptTransactionHash,
+          phase: "idle",
+          message: "An interrupted legacy multi-step route was found. It was not resumed; choose a route to use the new one-sign flow.",
+          hash: checkpoint.transactionHash,
         });
         return;
       }
       setExecution({
-        phase: "idle",
-        message: checkpoint.paymentPending
-          ? "The route is confirmed. Check the saved payment hash before continuing."
-          : checkpoint.paymentHash
-            ? "The payment is confirmed. Resume only the settlement receipt."
-            : "The saved route is confirmed. Resume from its payment step.",
-        hash: checkpoint.paymentHash ?? checkpoint.routeTransactionHash,
+        phase: "pending",
+        message: "The transaction is still pending. AnchorScout will not submit a duplicate.",
+        hash: checkpoint.transactionHash,
       });
     }, 0);
     return () => window.clearTimeout(timer);
@@ -350,21 +338,8 @@ export function AnchorScoutApp({
     if (!checkpoint || !wallet) return;
     let active = true;
     const reconcileContractSubmission = async () => {
-      const savedRoute = history.find(
-        (route) => route.routeId === checkpoint.routeId,
-      );
-      const stage = !savedRoute
-        ? "route"
-        : checkpoint.receiptPending
-          ? "receipt"
-          : null;
-      const hash =
-        stage === "route"
-          ? checkpoint.routeTransactionHash
-          : stage === "receipt"
-            ? checkpoint.receiptTransactionHash
-            : undefined;
-      if (!stage || !hash) return;
+      const hash = checkpoint.transactionHash;
+      if (!hash) return;
       try {
         const response = await fetch(`/api/stellar/transaction/${hash}`, {
           cache: "no-store",
@@ -375,25 +350,18 @@ export function AnchorScoutApp({
         };
         if (payload.status === "SUCCESS") {
           await refreshHistory(wallet.address);
-        } else if (payload.status === "FAILED" && stage === "route") {
+        } else if (payload.status === "FAILED") {
           persistCheckpoint(null);
+          setProofStage("authorize");
           setExecution({
             phase: "failed",
-            message:
-              "The saved route transaction failed on-chain. You can safely start a new proof.",
+            message: "The atomic transaction failed on-chain. You can safely try again.",
             hash,
           });
-        } else if (payload.status === "FAILED") {
-          persistCheckpoint({
-            ...checkpoint,
-            receiptPending: false,
-            receiptTransactionHash: undefined,
-          });
-          setExecution({
-            phase: "idle",
-            message:
-              "The prior receipt transaction failed on-chain. Resume to retry only the receipt.",
-            hash,
+          setFlowToast({
+            tone: "error",
+            title: "Transaction failed",
+            message: "No partial route or settlement state was saved.",
           });
         }
       } catch {
@@ -592,7 +560,7 @@ export function AnchorScoutApp({
     setSelected(null);
     setCheckpoint(null);
     setWizardStep("request");
-    setProofStage("route");
+    setProofStage("authorize");
     setExecution({
       phase: "idle",
       message: "Select an externally sourced route to start the Testnet proof.",
@@ -628,7 +596,7 @@ export function AnchorScoutApp({
     setQuoteBusy(true);
     setQuoteError("");
     setSelected(null);
-    setProofStage("route");
+    setProofStage("authorize");
     try {
       const response = await fetch("/api/quotes", {
         method: "POST",
@@ -670,7 +638,7 @@ export function AnchorScoutApp({
     setRouteRequest(next);
     if (searchedRequest && routeRequestKey(next) !== routeRequestKey(searchedRequest)) {
       setSelected(null);
-      setProofStage("route");
+      setProofStage("authorize");
       setExecution({
         phase: "idle",
         message: "Transfer details changed. Refresh routes before selecting one.",
@@ -698,209 +666,66 @@ export function AnchorScoutApp({
   const handleExecute = async (session?: WalletSession) => {
     if (executionLock.current) return;
     const activeWallet = session ?? wallet;
-    if (!activeWallet || (!selected && !checkpoint)) return;
-    if (!checkpoint && selected && !isSelectableQuote(selected, new Date()))
+    if (!activeWallet || !selected) return;
+    if (checkpoint?.transactionHash) {
+      return setExecution({
+        phase: "pending",
+        message: "The previous transaction is still being checked. No duplicate will be submitted.",
+        hash: checkpoint.transactionHash,
+      });
+    }
+    if (!isSelectableQuote(selected, new Date()))
       return setExecution({
         phase: "expired",
         message: "This quote expired. Refresh routes before signing.",
       });
-    if (!contractsConfigured || !PROOF_PAYMENT_DESTINATION)
+    if (!contractsConfigured)
       return setExecution({
         phase: "failed",
         message:
           "The public Testnet proof deployment is not configured in this build.",
       });
     executionLock.current = true;
+    const routeId = createRouteId();
+    const receiptId = createRouteId();
+    let progress: ProofCheckpoint = {
+      version: 2,
+      walletAddress: activeWallet.address,
+      anchorId: selected.anchorId,
+      routeId: routeId.toString("hex"),
+      receiptId: receiptId.toString("hex"),
+    };
+    persistCheckpoint(progress);
+    setProofStage("authorize");
+    track("route_selected", { anchor: selected.anchorId });
     try {
-      let progress =
-        checkpoint?.walletAddress === activeWallet.address ? checkpoint : null;
-      const updateProgress = (
-        stage: "route" | "payment" | "receipt",
-        update: TransactionUpdate,
-        messagePrefix = "",
-      ) => {
-        setProofStage(stage);
-        setExecution({
-          ...update,
-          message: messagePrefix
-            ? `${messagePrefix}${update.message}`
-            : update.message,
-        });
-        if (!progress) return;
-        const next = applyBroadcastUpdate(progress, stage, update);
+      const updateProgress = (update: TransactionUpdate) => {
+        setExecution(update);
+        const next = applyBroadcastUpdate(progress, update);
         if (next !== progress) {
           progress = next;
           persistCheckpoint(progress);
         }
       };
-
-      const finalizeFailedRoute = async (paymentHash: string) => {
-        if (!progress) throw new Error("Route checkpoint is missing");
-        progress = {
-          ...progress,
-          failedPaymentHash: paymentHash,
-          paymentPending: false,
-        };
-        persistCheckpoint(progress);
-        const routeId = Buffer.from(progress.routeId, "hex");
-        try {
-          await recordSettlement({
-            address: activeWallet.address,
-            signTransaction: walletSigner(activeWallet.address),
-            routeId,
-            paymentHash,
-            succeeded: false,
-            onUpdate: (update) => updateProgress("receipt", update),
-          });
-        } catch (error) {
-          if (!(error instanceof SubmittedTransactionPendingError)) {
-            progress = {
-              ...progress,
-              receiptTransactionHash: undefined,
-              receiptPending: false,
-            };
-            persistCheckpoint(progress);
-          }
-          throw error;
-        }
-        persistCheckpoint(null);
-        setExecution({
-          phase: "failed",
-          message:
-            "The payment did not complete and the original route was finalized as failed.",
-          hash: paymentHash === "0".repeat(64) ? undefined : paymentHash,
-        });
-        setFlowToast({
-          tone: "error",
-          title: "Proof stopped safely",
-          message: "The payment failed and the route was finalized without retrying it.",
-        });
-        await refreshHistory(activeWallet.address);
-      };
-
-      if (!progress) {
-        if (!selected) return;
-        setProofStage("route");
-        track("route_selected", { anchor: selected.anchorId });
-        const routeId = createRouteId();
-        progress = {
-          walletAddress: activeWallet.address,
-          anchorId: selected.anchorId,
-          routeId: routeId.toString("hex"),
-        };
-        try {
-          const route = await createRoute({
-            address: activeWallet.address,
-            signTransaction: walletSigner(activeWallet.address),
-            quote: selected,
-            routeId,
-            onUpdate: (update) => updateProgress("route", update),
-          });
-          progress = { ...progress, routeTransactionHash: route.hash };
-          persistCheckpoint(progress);
-        } catch (error) {
-          if (!(error instanceof SubmittedTransactionPendingError)) {
-            persistCheckpoint(null);
-          }
-          throw error;
-        }
-      }
-
-      const routeId = Buffer.from(progress.routeId, "hex");
-      if (progress.failedPaymentHash) {
-        await finalizeFailedRoute(progress.failedPaymentHash);
-        return;
-      }
-      if (progress.paymentPending && progress.paymentHash) {
-        const lookup = await findConfirmedXlmTransaction(progress.paymentHash);
-        if (lookup.status === "not_found") {
-          setExecution({
-            phase: "idle",
-            message:
-              "The saved payment is not confirmed yet. Check it again before continuing; no new payment will be sent.",
-            hash: progress.paymentHash,
-          });
-          return;
-        }
-        if (lookup.status === "failed") {
-          await finalizeFailedRoute(lookup.transaction.hash);
-          return;
-        }
-        progress = {
-          ...progress,
-          paymentHash: lookup.transaction.hash,
-          paymentPending: false,
-        };
-        persistCheckpoint(progress);
-      }
-
-      if (!progress.paymentHash) {
-        setProofStage("payment");
-        try {
-          const payment = await sendXlm({
-            source: activeWallet.address,
-            destination: PROOF_PAYMENT_DESTINATION,
-            amount: "0.1",
-            signTransaction: walletSigner(activeWallet.address),
-            onUpdate: (update) =>
-              updateProgress("payment", update, "Proof payment: "),
-          });
-          progress = {
-            ...progress,
-            paymentHash: payment.hash,
-            paymentPending: false,
-          };
-          persistCheckpoint(progress);
-        } catch (error) {
-          if (
-            error instanceof SubmittedTransactionPendingError &&
-            error.stage === "payment"
-          ) {
-            throw error;
-          }
-          await finalizeFailedRoute(
-            error instanceof TerminalPaymentFailedError
-              ? error.hash
-              : "0".repeat(64),
-          );
-          return;
-        }
-      }
-
-      const confirmedPaymentHash = progress.paymentHash;
-      if (!confirmedPaymentHash)
-        throw new Error("Confirmed payment hash is missing");
-      setProofStage("receipt");
-      try {
-        await recordSettlement({
-          address: activeWallet.address,
-          signTransaction: walletSigner(activeWallet.address),
-          routeId,
-          paymentHash: confirmedPaymentHash,
-          succeeded: true,
-          onUpdate: (update) => updateProgress("receipt", update),
-        });
-      } catch (error) {
-        if (!(error instanceof SubmittedTransactionPendingError)) {
-          progress = {
-            ...progress,
-            receiptTransactionHash: undefined,
-            receiptPending: false,
-          };
-          persistCheckpoint(progress);
-        }
-        throw error;
-      }
+      const result = await executeRoute({
+        address: activeWallet.address,
+        signTransaction: walletSigner(activeWallet.address),
+        quote: selected,
+        routeId,
+        receiptId,
+        onUpdate: updateProgress,
+      });
       persistCheckpoint(null);
       setProofStage("complete");
       setExecution({
         phase: "confirmed",
-        message: "Route, payment, and receipt confirmed on Stellar Testnet.",
+        message: "Route proof completed in one verified Stellar Testnet transaction.",
+        hash: result.hash,
       });
       setFlowToast({
         tone: "success",
         title: "Proof complete",
-        message: "Your route is confirmed and available in History.",
+        message: "One approval, one transaction, now available in History.",
       });
       track("route_settlement_confirmed", { anchor: progress.anchorId });
       await Promise.all([
@@ -908,6 +733,9 @@ export function AnchorScoutApp({
         refreshBalances(activeWallet.address),
       ]);
     } catch (error) {
+      if (!(error instanceof SubmittedTransactionPendingError)) {
+        persistCheckpoint(null);
+      }
       const update = classifyWalletError(error);
       setExecution(update);
       setFlowToast({
@@ -1279,7 +1107,7 @@ export function AnchorScoutApp({
                   stale={requestChanged}
                   onSelect={() => {
                     setSelected(quote);
-                    setProofStage("route");
+                    setProofStage("authorize");
                     setExecution({
                       phase: "idle",
                       message:
@@ -1375,9 +1203,8 @@ export function AnchorScoutApp({
                 <div>
                   <strong>One guided action</strong>
                   <p>
-                    Start once and AnchorScout will prepare, submit, and confirm
-                    each step automatically. Stellar may ask for up to three
-                    wallet approvals because each transaction remains under your control.
+                    Approve once. AnchorScout records the route, sends the 0.1 XLM
+                    proof, and finalizes the receipt in one atomic transaction.
                   </p>
                 </div>
               </div>
@@ -1417,7 +1244,7 @@ export function AnchorScoutApp({
                     className="button ghost"
                     onClick={() => {
                       setSelected(null);
-                      setProofStage("route");
+                      setProofStage("authorize");
                       setExecution({
                         phase: "idle",
                         message: "Select an externally sourced route to start the Testnet proof.",
@@ -1434,7 +1261,7 @@ export function AnchorScoutApp({
                     className="button ghost"
                     onClick={() => {
                       setSelected(null);
-                      setProofStage("route");
+                      setProofStage("authorize");
                       setExecution({
                         phase: "idle",
                         message: "Select an externally sourced route to start the Testnet proof.",
@@ -1447,7 +1274,8 @@ export function AnchorScoutApp({
                 )}
               </div>
               <p className="fine-print">
-                Testnet proof only. No quoted amount or PHP payout is sent.
+                Testnet proof only. The quoted amount and PHP payout are not sent;
+                the single transaction includes a 0.1 XLM proof transfer.
               </p>
             </>
           )}
@@ -1666,26 +1494,26 @@ export function AnchorScoutApp({
                         {route.status}
                       </span>
                       <span>{route.network === "TESTNET" ? "Stellar Testnet" : route.network}</span>
-                      {route.routeTransactionHash && (
-                        <a href={stellarHorizonTransactionUrl(route.routeTransactionHash)} target="_blank" rel="noreferrer">
-                          Route tx ↗
+                      {route.transactionHash && (
+                        <a
+                          href={stellarExpertUrl("tx", route.transactionHash)}
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          {route.transactionKind === "ATOMIC_PROOF"
+                            ? "View transaction"
+                            : "View legacy transaction"}{" "}
+                          {short(route.transactionHash, 8)} ↗
                         </a>
                       )}
-                      {route.paymentHash && (
-                        <a href={stellarHorizonTransactionUrl(route.paymentHash)} target="_blank" rel="noreferrer">
-                          Payment {short(route.paymentHash, 8)} ↗
-                        </a>
+                      {route.transactionKind === "ATOMIC_PROOF" && (
+                        <span>Atomic proof</span>
                       )}
-                      {route.paymentStatus === "NOT_FOUND" && (
-                        <span>Payment not found on Testnet</span>
+                      {route.transactionStatus === "NOT_FOUND" && (
+                        <span>Transaction not found on Testnet</span>
                       )}
-                      {route.paymentStatus === "UNAVAILABLE" && (
-                        <span>Payment verification temporarily unavailable</span>
-                      )}
-                      {route.receiptTransactionHash && (
-                        <a href={stellarHorizonTransactionUrl(route.receiptTransactionHash)} target="_blank" rel="noreferrer">
-                          Receipt tx ↗
-                        </a>
+                      {route.transactionStatus === "UNAVAILABLE" && (
+                        <span>Transaction verification temporarily unavailable</span>
                       )}
                       <span title={route.receiptId ?? undefined}>
                         {route.receiptId ? `Receipt ${short(route.receiptId, 8)}` : "Receipt pending"}
@@ -1709,56 +1537,31 @@ function ProofProgress({
   stage: ProofStage;
   update: TransactionUpdate;
 }) {
-  const stages = [
-    ["route", "Save route"],
-    ["payment", "Send proof payment"],
-    ["receipt", "Confirm receipt"],
-  ] as const;
-  const activeIndex =
-    stage === "complete" ? stages.length : stages.findIndex(([id]) => id === stage);
-  const stepName =
-    stage === "route"
-      ? "your route"
-      : stage === "payment"
-        ? "the proof payment"
-        : "your receipt";
   const message =
     stage === "complete"
-      ? "All proof steps are confirmed."
+      ? "The route is confirmed in one Testnet transaction."
       : update.phase === "awaiting_signature"
-        ? `Approval requested for ${stepName}. Check your wallet.`
+        ? "One approval requested. Check your wallet."
         : ["preparing", "simulating"].includes(update.phase)
-          ? `Preparing ${stepName}…`
+          ? "Preparing the atomic route transaction…"
           : ["signed", "submitting", "submitted", "pending"].includes(
                 update.phase,
               )
-            ? `Confirming ${stepName} on Stellar Testnet…`
-            : update.phase === "confirmed"
-              ? `${stepName[0].toUpperCase()}${stepName.slice(1)} confirmed. Continuing automatically…`
-              : update.message;
+            ? "Confirming the transaction on Stellar Testnet…"
+            : update.message;
   const hasError = ["failed", "rejected", "expired"].includes(update.phase);
 
   return (
     <div className={`proof-progress ${hasError ? "has-error" : ""}`}>
       <div className="proof-progress-heading">
-        <strong>Secure proof</strong>
-        <span>{stage === "complete" ? "Complete" : "Runs automatically"}</span>
+        <strong>One secure transaction</strong>
+        <span>{stage === "complete" ? "Complete" : "One wallet approval"}</span>
       </div>
       <ol aria-label="Proof progress">
-        {stages.map(([id, label], index) => {
-          const state =
-            stage === "complete" || index < activeIndex
-              ? "complete"
-              : index === activeIndex
-                ? "current"
-                : "pending";
-          return (
-            <li className={state} key={id}>
-              <span aria-hidden="true">{state === "complete" ? "✓" : ""}</span>
-              <strong>{label}</strong>
-            </li>
-          );
-        })}
+        <li className={stage === "complete" ? "complete" : "current"}>
+          <span aria-hidden="true">{stage === "complete" ? "✓" : "1"}</span>
+          <strong>Authorize and complete route</strong>
+        </li>
       </ol>
       <div className="proof-live-status" role="status" aria-live="polite">
         <span className="proof-live-dot" aria-hidden="true" />

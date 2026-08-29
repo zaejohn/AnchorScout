@@ -85,9 +85,16 @@
 - Why: Provider cards should reflect current external capabilities rather than configured names or inferred corridors. Dynamic unsupported outcomes remain health evidence and never become selectable routes.
 - Consequences: Onramper may return zero or more independently attributed cards. Generic/Mainnet USDC, blocked providers, failed quote entries, and unsupported payment methods are excluded. MoneyGram no longer appears for bank or GCash, anonymous users cannot proxy account-scoped Coins.ph credentials, and existing automated bank comparisons continue to select only eligible bank routes.
 
-## 2026-08-28 — Verify History evidence before linking it
+## 2026-08-28 — Verify legacy History evidence before linking it
 
 - Context: A completed route stores the wallet-authorized classic payment hash, while route and receipt transaction hashes are reconstructed from successful RPC events. History previously linked those identifiers directly through a third-party explorer, whose indexing can lag the network and whose error page did not distinguish an unindexed transaction from a wrong hash or network.
-- Decision: Resolve every stored payment hash through Testnet Horizon and expose only Horizon's matching canonical hash. Accept route and receipt hashes only from successful configured-Testnet RPC events with valid transaction-hash encoding. Mark every record as Testnet and link transaction evidence to canonical Testnet Horizon records.
+- Decision: Resolve every stored legacy payment hash through Testnet Horizon and expose only Horizon's matching canonical hash. Accept contract hashes only from successful configured-Testnet RPC events with valid transaction-hash encoding. Mark every record as Testnet.
 - Why: History must prove the exact hash against the same network used by execution before presenting it as blockchain evidence.
-- Consequences: A missing or mismatched payment hash is shown as unverified instead of opening a misleading transaction page. RPC event retention can still make older route/receipt invocation links unavailable, while the durable route and receipt records remain readable on-chain.
+- Consequences: A missing or mismatched legacy payment hash is shown as unverified instead of opening a misleading transaction page. The 2026-08-29 executor decision supersedes Horizon as the user-facing link target; History now opens its one canonical hash in Stellar Expert.
+
+## 2026-08-29 — One-approval atomic route proof
+
+- Context: The route selection, classic XLM proof, and settlement receipt required three wallet approvals and produced three History links. Horizon was also exposed as the user-facing explorer.
+- Decision: Add an immutable Route Executor that creates the route, transfers 0.1 XLM through the native Testnet SAC, records the receipt, and finalizes the route in one Soroban invocation tree. Use the successful `route_executed` event's outer hash as the only canonical atomic evidence and link it to Stellar Expert Testnet.
+- Why: One authorization tree removes repeated wallet friction while Soroban transaction rollback prevents partial route, transfer, or receipt state. Full executor configuration is read on-chain and matched before execution.
+- Consequences: The external quoted amount and PHP payout remain unexecuted comparison data; only the separate 0.1 XLM Testnet proof is atomic. The legacy receipt ABI stores a zero hash sentinel because contracts cannot inspect their own outer hash. Existing three-transaction records remain available through one explicitly labeled legacy link, and interrupted legacy checkpoints are never automatically continued.

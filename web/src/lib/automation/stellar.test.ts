@@ -6,6 +6,7 @@ const mocks = vi.hoisted(() => ({
   getTransaction: vi.fn(), sendTransaction: vi.fn(), getNetwork: vi.fn(),
   findClassic: vi.fn(), prepareXlm: vi.fn(), hasDeployment: vi.fn(),
   prepareTrustline: vi.fn(), prepareSwap: vi.fn(),
+  verifyExecutor: vi.fn(),
   transactions: vi.fn(), historyCall: vi.fn(), operations: vi.fn(), operationsCall: vi.fn(),
 }));
 
@@ -28,6 +29,10 @@ vi.mock("../stellar/classic", () => ({
 vi.mock("../stellar/usdc", async (importOriginal) => ({
   ...await importOriginal<typeof import("../stellar/usdc")>(),
   prepareUsdcTrustline: mocks.prepareTrustline, prepareUsdcSwap: mocks.prepareSwap,
+}));
+vi.mock("../stellar/contracts", async (importOriginal) => ({
+  ...await importOriginal<typeof import("../stellar/contracts")>(),
+  verifyRouteExecutorConfiguration: mocks.verifyExecutor,
 }));
 vi.mock("../stellar/config", async (importOriginal) => ({
   ...await importOriginal<typeof import("../stellar/config")>(),
@@ -66,6 +71,7 @@ beforeEach(() => {
   vi.stubEnv("TESTNET_USDC_ISSUER", OFFICIAL_TESTNET_USDC_ISSUER);
   vi.stubEnv("NEXT_PUBLIC_TESTNET_USDC_ISSUER", OFFICIAL_TESTNET_USDC_ISSUER);
   mocks.hasDeployment.mockReturnValue(true);
+  mocks.verifyExecutor.mockResolvedValue(true);
   mocks.getNetwork.mockResolvedValue({ passphrase: Networks.TESTNET });
   mocks.getTransaction.mockResolvedValue({ status: "NOT_FOUND" });
   mocks.findClassic.mockResolvedValue({ status: "not_found" });
@@ -316,6 +322,16 @@ describe("Testnet configuration boundary", () => {
     await expect(verifyTestnetConfiguration()).rejects.toThrow("OFFICIAL_TESTNET_USDC_ISSUER_REQUIRED");
     expect(mocks.getNetwork).not.toHaveBeenCalled();
     expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it("blocks a syntactically valid but miswired executor", async () => {
+    mocks.verifyExecutor.mockRejectedValueOnce(
+      new Error("Atomic Testnet executor configuration mismatch"),
+    );
+    await expect(verifyTestnetConfiguration()).rejects.toThrow(
+      "Atomic Testnet executor configuration mismatch",
+    );
+    expect(mocks.sendTransaction).not.toHaveBeenCalled();
   });
 });
 

@@ -2,6 +2,7 @@ import { Buffer } from "buffer";
 import { scValToNative, xdr } from "@stellar/stellar-sdk";
 
 import {
+  ROUTE_EXECUTOR_CONTRACT_ID,
   ROUTE_REGISTRY_CONTRACT_ID,
   SETTLEMENT_RECEIPT_CONTRACT_ID,
   STELLAR_RPC_URL,
@@ -15,6 +16,7 @@ type RawContractEvent = {
 };
 
 export type RouteTransactionEvidence = {
+  executionTransactionHash?: string;
   routeTransactionHash?: string;
   receiptTransactionHash?: string;
 };
@@ -39,6 +41,7 @@ export function evidenceFromEvents(events: RawContractEvent[]) {
       if (!TRANSACTION_HASH.test(transactionHash)) continue;
       const current = evidence.get(routeId) ?? {};
       if (name === "route_selected") current.routeTransactionHash = transactionHash;
+      if (name === "route_executed") current.executionTransactionHash = transactionHash;
       if (name === "settlement_recorded" || name === "route_status_changed") {
         current.receiptTransactionHash = transactionHash;
       }
@@ -90,9 +93,10 @@ export async function getRouteTransactionEvidence(routeIds: string[]) {
         {
           type: "contract",
           contractIds: [
+            ROUTE_EXECUTOR_CONTRACT_ID,
             ROUTE_REGISTRY_CONTRACT_ID,
             SETTLEMENT_RECEIPT_CONTRACT_ID,
-          ],
+          ].filter(Boolean),
         },
       ],
       pagination: { limit: 100, ...(cursor ? { cursor } : {}) },
@@ -100,8 +104,14 @@ export async function getRouteTransactionEvidence(routeIds: string[]) {
     });
     collected.push(...result.events);
     const pageEvidence = evidenceFromEvents(result.events);
-    for (const routeId of pageEvidence.keys()) {
-      if (wanted.has(routeId)) found.add(routeId);
+    for (const [routeId, routeEvidence] of pageEvidence) {
+      if (
+        wanted.has(routeId) &&
+        (routeEvidence.executionTransactionHash ||
+          routeEvidence.receiptTransactionHash)
+      ) {
+        found.add(routeId);
+      }
     }
     if (result.events.length < 100 || result.cursor === cursor) break;
     cursor = result.cursor;

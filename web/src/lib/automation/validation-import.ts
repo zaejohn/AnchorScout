@@ -6,7 +6,7 @@ import { SIMULATION_STATES, type SimulationRun } from "./types";
 
 const hex = z.string().regex(/^[a-f0-9]{64}$/);
 const date = z.string().datetime();
-const transactionKind = z.enum(["trustline", "swap", "route", "proof", "receipt"]);
+const transactionKind = z.enum(["trustline", "swap", "execution", "route", "proof", "receipt"]);
 const runSchema = z.object({
   id: z.string().uuid(), profileId: hex, wallet: z.string().regex(/^G[A-Z2-7]{55}$/),
   amount: z.string().regex(/^\d+$/).refine((value) => Number(value) >= 507 && Number(value) <= 1777),
@@ -15,7 +15,7 @@ const runSchema = z.object({
   quotes: z.array(z.record(z.string(), z.unknown())).optional(),
   pending: z.object({ kind: transactionKind, hash: hex, xdr: z.string().min(1) }).strict().optional(),
   failedTransactions: z.array(z.object({ kind: transactionKind, hash: hex, outcome: z.enum(["expired", "failed"]) }).strict()).optional(),
-  hashes: z.record(z.enum(["funding", "trustline", "swap", "route", "proof", "receipt"]), hex.optional()),
+  hashes: z.record(z.enum(["funding", "trustline", "swap", "execution", "route", "proof", "receipt"]), hex.optional()),
   formStatus: z.enum(["NOT_SENT", "SENDING", "CONFIRMED", "UNKNOWN"]), attempts: z.number().int().nonnegative(),
   nextAttemptAt: date.optional(), blocked: z.string().optional(), error: z.string().optional(), createdAt: date,
   history: z.array(z.object({ state: z.enum(SIMULATION_STATES), at: date }).strict()).min(1),

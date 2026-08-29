@@ -7,7 +7,7 @@ import type { AnchorQuote } from "../anchors/types";
 import { FormPreflightError, FormSubmissionUnknownError } from "./form";
 import { LeaseLostError, seedProfiles, SimulationStore, type SqlConnection, type SqlDatabase } from "./store";
 import { SimulationBlockedError } from "./stellar";
-import { SIMULATION_STATES, type SimulationRun, type TransactionKind } from "./types";
+import type { SimulationRun, TransactionKind } from "./types";
 import { runSimulation, type SimulationServices } from "./worker";
 
 const profiles = [
@@ -93,7 +93,7 @@ describe("durable simulation worker", () => {
       const run = await saved();
       expect(run.state).toBe("COMPLETED");
       expect(run.formStatus).toBe("SENDING");
-      expect(run.hashes.receipt).toBeTruthy();
+      expect(run.hashes.execution).toBeTruthy();
       expect(run.pending).toBeUndefined();
       expect(wallet).toBe(run.wallet);
       expect(profile).toEqual(await store.getProfile(run.profileId));
@@ -107,20 +107,22 @@ describe("durable simulation worker", () => {
     }
     expect(result!.kind).toBe("completed");
     const run = await saved();
-    expect(run.history.map((entry) => entry.state)).toEqual(SIMULATION_STATES);
+    expect(run.history.map((entry) => entry.state)).toEqual([
+      "CREATED", "FUNDED", "SWAPPED", "ROUTES_COMPARED", "COMPLETED", "FORM_SUBMITTED",
+    ]);
     expect(factory).toHaveBeenCalledTimes(1);
     expect(external.fundWallet).toHaveBeenCalledExactlyOnceWith(run.wallet);
     expect(external.compare).toHaveBeenCalledExactlyOnceWith(run.amount);
     expect(run.quote?.quoteId).toBe("quote-1");
     expect(run.quotes).toContainEqual(run.quote);
-    expect(external.prepareTransaction.mock.calls.map(([kind]) => kind)).toEqual(["trustline", "swap", "route", "proof", "receipt"]);
+    expect(external.prepareTransaction.mock.calls.map(([kind]) => kind)).toEqual(["trustline", "swap", "execution"]);
     for (const [, passed] of external.prepareTransaction.mock.calls) {
       expect(passed.wallet).toBe(run.wallet); expect(passed.amount).toBe("1777");
     }
     expect(external.verifySwap).toHaveBeenCalledTimes(1);
-    expect(external.verifyRoute.mock.calls.map(([, completed]) => completed)).toEqual([undefined, true, true]);
+    expect(external.verifyRoute.mock.calls.map(([, completed]) => completed)).toEqual([true, true]);
     expect(external.submitForm).toHaveBeenCalledTimes(1);
-    expect(saveStates).toContain("PROOF_SIGNED");
+    expect(saveStates).toContain("COMPLETED");
     const status = await store.status();
     expect(status.activeRun).toBeNull();
     expect(status.remainingProfiles).toBe(1);

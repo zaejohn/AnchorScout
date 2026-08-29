@@ -47,6 +47,28 @@ export async function GET(
                 findConfirmedXlmTransaction,
               )
             : null;
+        const transactionHash =
+          evidence?.executionTransactionHash ??
+          payment?.hash ??
+          evidence?.receiptTransactionHash ??
+          evidence?.routeTransactionHash ??
+          null;
+        const transactionStatus = evidence?.executionTransactionHash
+          ? "SUCCESS"
+          : payment?.hash
+            ? payment.status
+            : transactionHash
+              ? "SUCCESS"
+              : payment?.status ?? null;
+        const transactionKind = evidence?.executionTransactionHash
+          ? "ATOMIC_PROOF"
+          : payment?.hash
+            ? "LEGACY_PAYMENT"
+            : evidence?.receiptTransactionHash
+              ? "LEGACY_RECEIPT"
+              : evidence?.routeTransactionHash
+                ? "ROUTE_SELECTION"
+                : null;
         return {
           routeId,
           anchorId: route.anchor_id,
@@ -58,13 +80,12 @@ export async function GET(
           selectedAt: Number(route.selected_at),
           status: statusTag(route.status),
           network: STELLAR_NETWORK,
-          paymentHash: payment?.hash ?? null,
-          paymentStatus: payment?.status ?? null,
+          transactionHash,
+          transactionStatus,
+          transactionKind,
           receiptId: receipt
             ? Buffer.from(receipt.receipt_id).toString("hex")
             : null,
-          routeTransactionHash: evidence?.routeTransactionHash ?? null,
-          receiptTransactionHash: evidence?.receiptTransactionHash ?? null,
         };
       }),
     );

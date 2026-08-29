@@ -22,6 +22,13 @@ describe("contract transaction evidence", () => {
     });
   });
 
+  it("uses the outer executor event as canonical atomic evidence", () => {
+    const evidence = evidenceFromEvents([
+      { id: "1", txHash: "3".repeat(64), topic: topic("route_executed") },
+    ]);
+    expect(evidence.get(routeId)?.executionTransactionHash).toBe("3".repeat(64));
+  });
+
   it("ignores failed and malformed events", () => {
     expect(
       evidenceFromEvents([

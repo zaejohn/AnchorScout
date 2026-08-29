@@ -18,6 +18,8 @@ Never store secret keys or seed phrases here.
 - Testnet proof payment destination: `GDW2INHQPIWK6JYMVDPCT3JZHMBSYPDEWB56PCRC2JSXADAF22VF253M`
 - Route Registry: `CBYCCXCJLFQKUIPNJDQNXXIGV26S4FSXGHRYQQBPU3EYUGE6EXRRDZ5H`
 - Settlement Receipt: `CBQKALTRUEBNTDOKL7UOOSEFPJMHZRQCWV5C6VZA4T3TO4WEB2OIBDJM`
+- Route Executor: `CAFKJQJGL4U3LAGEGXARMHGURTQUUCJYSRBKMZC7AI3JXMQHUZW2BIQH`
+- Native XLM SAC: `CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC`
 
 ### Artifacts
 
@@ -25,6 +27,7 @@ Never store secret keys or seed phrases here.
 | --- | ---: | --- |
 | Route Registry | 9,004 bytes | `24b102f554ea00b9c01bd2f8d1880aa1258ba950872acffc20b981e2b96cc994` |
 | Settlement Receipt | 4,367 bytes | `dcbad6f7cfd3cf3f81084780e5d30c51043235b96e30ad12ef846c4dd2756dd4` |
+| Route Executor | 3,893 bytes | `9370d49282dad9b5e1d6406b28f6ea262f17c288a5d8a0889eeeeb9e85e79a4b` |
 
 ### Deployment evidence
 
@@ -35,8 +38,19 @@ Never store secret keys or seed phrases here.
 | Upload Settlement Receipt WASM | [`c16721ac…ef81`](https://stellar.expert/explorer/testnet/tx/c16721ace50b9f098205277f8ef7e6f752ca40f25de36751008d90116d1feef81) |
 | Deploy Settlement Receipt | [`45af7161…55fc`](https://stellar.expert/explorer/testnet/tx/45af71619f573657cdd278704ed6cb03c499cd3f77f0b15856268711a39c755fc) |
 | Configure one-shot settlement authority | [`cb950f38…f45a`](https://stellar.expert/explorer/testnet/tx/cb950f38aa50b35f08e15d824d9eb1daff1ad8da82e532372577c0dd3164af45a) |
+| Upload Route Executor WASM | [`d8e30e05…8faa`](https://stellar.expert/explorer/testnet/tx/d8e30e05fa7f3af1f37674cb130d53ead0d3e459f0b20fb7fe55924af1808faa) |
+| Deploy Route Executor | [`bc03702f…00c1`](https://stellar.expert/explorer/testnet/tx/bc03702f0d90bb1e2d89a619687e012c45e30f1f365570ccb0a6184317e000c1) |
 
-### End-to-end smoke evidence
+### One-sign atomic smoke evidence — 2026-08-29
+
+- Route ID: `36bae1f8c598f06a8fed38fc3f903054f9d0bd9df67b7cfd280b66f808ede6c6`
+- Receipt ID: `50856ceff9d4370d18d4e4e19769bc4d8f95e33b3c04ff901c473fd55a2c6b53`
+- One outer transaction: [`c6948d8c…6551e`](https://stellar.expert/explorer/testnet/tx/c6948d8c82c8413f05d61e6a7f6a11f88a81838ca4a7ec414a17e074ebc6551e)
+- RPC confirmation: `SUCCESS`, ledger `4392929`, close time `1787988232`.
+- The same transaction emitted `route_selected`, native SAC `transfer` of `1000000` stroops to the configured destination, `settlement_recorded`, `route_status_changed`, and `route_executed`.
+- Final public reads: Route Registry `Completed`; Settlement Receipt `Completed`; executor configuration matched the deployed registry, settlement contract, native XLM SAC, proof destination, and amount.
+
+### Legacy three-transaction smoke evidence
 
 - Route ID: `18d4777991f485d925a27aaa7dbee5ae8edf6e4650300e20c09b8c1689a41204`
 - Receipt ID: `c6c29ff912cb9af2fff51c0a344b67f3711859f43a7e576ad08106d70493b612`

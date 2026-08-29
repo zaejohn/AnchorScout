@@ -23,12 +23,11 @@ The screenshots are from the locally running production-shaped application. Publ
 3. Submit a validated route request to the Next.js backend.
 4. Query Coins.ph live market data, MoneyGram Testnet capability, and any configured SEP-38 endpoint concurrently.
 5. Normalize provenance, missing fields, expiry, settlement mode, and deterministic ranking.
-6. Sign a Route Registry invocation with the user's wallet.
-7. Sign and confirm a real classic XLM payment.
-8. Sign a Settlement Receipt invocation. That contract atomically invokes Route Registry and finalizes the route.
-9. Poll contract events and reload durable contract-backed history.
+6. Approve one Route Executor invocation with the user's wallet.
+7. In that one atomic transaction, record the route, transfer the 0.1 XLM Testnet proof through the native XLM SAC, and finalize the receipt.
+8. Poll contract events and reload durable contract-backed history with one canonical Stellar Expert link.
 
-AnchorScout never holds funds, requests secret keys, accepts a production provider quote, or signs for users. The external PHP payout remains simulated on Testnet and is explicitly separate from the 0.1 XLM proof payment. The classic payment hash is confirmed through Horizon by the app and user-attested on-chain because Soroban cannot independently query classic transaction history.
+AnchorScout never holds funds, requests secret keys, accepts a production provider quote, or signs for users. The external PHP payout remains simulated on Testnet and is explicitly separate from the 0.1 XLM proof transfer. `route_executed` is the canonical atomic-proof event; older multi-transaction records remain labeled legacy.
 
 ## Routes
 
@@ -46,14 +45,15 @@ Browser wallet + responsive client
         │                                  │
         │                                  └── normalization + deterministic ranking
         │
-        ├── Horizon ── balances, classic XLM submission, payment confirmation
+        ├── Horizon ── balances and classic Send XLM utility
         │
         └── Stellar RPC ── simulation, wallet signing, contract submission, events
                                   │
-                    Route Registry contract
-                                  ▲
-                                  │ atomic authenticated invocation
-                    Settlement Receipt contract
+                    Route Executor contract
+                      │      │       │
+                      │      │       └── native XLM SAC transfer
+                      │      └── Settlement Receipt contract
+                      └── Route Registry contract
 ```
 
 - `web/src/lib/anchors/`: request schema, provider interface, adapters, normalization, ranking, and tests
@@ -61,6 +61,7 @@ Browser wallet + responsive client
 - `web/src/app/api/`: quote, account, event, transaction-status, and history boundaries
 - `contracts/route-registry/`: wallet-owned route records and final-state transitions
 - `contracts/settlement-receipt/`: globally unique receipts and authenticated cross-contract finalization
+- `contracts/route-executor/`: one-approval orchestration and atomic native-XLM proof transfer
 - `web/src/lib/stellar/generated/`: generated TypeScript bindings from deployed contract specs
 
 See `ARCHITECTURE.md` for boundaries and invariants and `DECISIONS.md` for durable design choices.
@@ -91,6 +92,7 @@ NEXT_PUBLIC_STELLAR_HORIZON_URL=https://horizon-testnet.stellar.org
 NEXT_PUBLIC_STELLAR_RPC_URL=https://soroban-testnet.stellar.org
 NEXT_PUBLIC_ROUTE_REGISTRY_CONTRACT_ID=CBYCCXCJLFQKUIPNJDQNXXIGV26S4FSXGHRYQQBPU3EYUGE6EXRRDZ5H
 NEXT_PUBLIC_SETTLEMENT_RECEIPT_CONTRACT_ID=CBQKALTRUEBNTDOKL7UOOSEFPJMHZRQCWV5C6VZA4T3TO4WEB2OIBDJM
+NEXT_PUBLIC_ROUTE_EXECUTOR_CONTRACT_ID=CAFKJQJGL4U3LAGEGXARMHGURTQUUCJYSRBKMZC7AI3JXMQHUZW2BIQH
 NEXT_PUBLIC_PROOF_PAYMENT_DESTINATION=GDW2INHQPIWK6JYMVDPCT3JZHMBSYPDEWB56PCRC2JSXADAF22VF253M
 ```
 
@@ -134,9 +136,9 @@ Verified release result:
 
 - ESLint: passed
 - TypeScript: passed
-- Frontend/domain tests: 78 passed across 12 files
+- Frontend/domain tests: 236 passed across 25 files
 - Next.js 16.3.2 production build: passed
-- Soroban tests: 16 passed
+- Soroban tests: 22 passed
 - Optimized contract builds: passed
 - Contract specialist re-review: no release-blocking findings
 - Desktop and 390 px mobile browser checks: passed
@@ -149,7 +151,7 @@ The same gates are encoded in `.github/workflows/ci.yml`. [GitHub Actions run #4
 powershell -ExecutionPolicy Bypass -File scripts\deploy-testnet.ps1
 ```
 
-The script retests and rebuilds exact optimized artifacts, creates/funds a secure-store deployer identity, deploys both contracts, configures the one-shot settlement authority, smoke-reads state, and regenerates TypeScript bindings. No secret is written to the repository.
+The script retests and rebuilds exact optimized artifacts, creates/funds a secure-store deployer identity, deploys all three contracts, configures the one-shot settlement authority, smoke-reads state, and regenerates TypeScript bindings. No secret is written to the repository.
 
 ## Stellar Testnet
 
@@ -157,11 +159,10 @@ The script retests and rebuilds exact optimized artifacts, creates/funds a secur
 | --- | --- |
 | Route Registry | [`CBYCCX…RDZ5H`](https://lab.stellar.org/r/testnet/contract/CBYCCXCJLFQKUIPNJDQNXXIGV26S4FSXGHRYQQBPU3EYUGE6EXRRDZ5H) |
 | Settlement Receipt | [`CBQKALT…IBDJM`](https://lab.stellar.org/r/testnet/contract/CBQKALTRUEBNTDOKL7UOOSEFPJMHZRQCWV5C6VZA4T3TO4WEB2OIBDJM) |
-| Route selection | [`c1875852…c1d2`](https://stellar.expert/explorer/testnet/tx/c18758523958bcb4738664364bbd401a8fe225f46f3b68efc324bbb4ad41c1d2) |
-| Confirmed 0.1 XLM payment | [`707e08de…b164`](https://stellar.expert/explorer/testnet/tx/707e08de52ba122c2d9ae992bf3a9c0d03b58f7d39ebd194f993ef3fe091b164) |
-| Receipt + cross-contract finalization | [`eefe216d…d93a`](https://stellar.expert/explorer/testnet/tx/eefe216d59c3a7123a1a59a18e5edd660478c2ab3becb0ec06e930657467d93a) |
+| Route Executor | [`CAFKJQJ…W2BIQH`](https://lab.stellar.org/r/testnet/contract/CAFKJQJGL4U3LAGEGXARMHGURTQUUCJYSRBKMZC7AI3JXMQHUZW2BIQH) |
+| One-sign route proof | [`c6948d8c…6551e`](https://stellar.expert/explorer/testnet/tx/c6948d8c82c8413f05d61e6a7f6a11f88a81838ca4a7ec414a17e074ebc6551e) |
 
-The final public reads return a `Completed` route and `Completed` receipt linked to the same payment hash. `NETWORKS.md` contains complete artifact hashes, deployment transactions, IDs, asset scope, and reset guidance.
+The final public reads return a `Completed` route and receipt, while the executor's `route_executed` event and native SAC transfer share the one outer transaction hash. `NETWORKS.md` contains complete artifact hashes, deployment transactions, IDs, asset scope, and reset guidance.
 
 ## Operational status
 

@@ -68,11 +68,16 @@ export async function runSimulation(
       if (kind === "swap") await services.verifySwap(run);
       if (kind === "route") await services.verifyRoute(run);
       if (kind === "receipt") await services.verifyRoute(run, true);
+      if (kind === "execution") {
+        run.hashes.execution = hash;
+        await services.verifyRoute(run, true);
+      }
       run.hashes[kind] = hash;
       delete run.pending;
       if (kind === "swap") run.state = "SWAPPED";
       if (kind === "route") run.state = "ROUTE_SELECTED";
       if (kind === "receipt") run.state = "COMPLETED";
+      if (kind === "execution") run.state = "COMPLETED";
       clearRetry(run);
       await save();
       return { kind: "running", run: publicRun(run) };
@@ -96,7 +101,7 @@ export async function runSimulation(
         run.state = "ROUTES_COMPARED";
         await save();
         // Compare and prepare during the same tick; provider quotes live ~60s.
-        await prepare("route");
+        await prepare("execution");
         break;
       }
       case "ROUTE_SELECTED":

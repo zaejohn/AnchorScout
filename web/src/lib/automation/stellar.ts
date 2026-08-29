@@ -1,12 +1,12 @@
 import "server-only";
-import { Address, Asset, Horizon, Keypair, Networks, Transaction, TransactionBuilder, rpc } from "@stellar/stellar-sdk";
-import { prepareRouteTransaction, prepareSettlementTransaction, getRouteReceipt, hashRouteQuote } from "../stellar/contracts";
+import { Address, Asset, Horizon, Keypair, Networks, Transaction, TransactionBuilder, rpc, scValToNative } from "@stellar/stellar-sdk";
+import { prepareRouteExecutionTransaction, prepareRouteTransaction, prepareSettlementTransaction, getRouteReceipt, hashRouteQuote, verifyRouteExecutorConfiguration } from "../stellar/contracts";
 import { isSelectableQuote } from "../anchors/ranking";
 import { Client as RouteClient } from "../stellar/generated/route-registry/src";
 import { prepareXlmTransaction, findConfirmedXlmTransaction } from "../stellar/classic";
 import { prepareUsdcSwap, prepareUsdcTrustline, usdcBalance } from "../stellar/usdc";
 import { decimalToUnits } from "../stellar/units";
-import { PROOF_PAYMENT_DESTINATION, ROUTE_REGISTRY_CONTRACT_ID, SETTLEMENT_RECEIPT_CONTRACT_ID, STELLAR_HORIZON_URL, STELLAR_RPC_URL, hasExecutableDeployment } from "../stellar/config";
+import { PROOF_PAYMENT_DESTINATION, ROUTE_EXECUTOR_CONTRACT_ID, ROUTE_REGISTRY_CONTRACT_ID, SETTLEMENT_RECEIPT_CONTRACT_ID, STELLAR_HORIZON_URL, STELLAR_RPC_URL, hasExecutableDeployment } from "../stellar/config";
 import { OFFICIAL_TESTNET_USDC_ISSUER, simulationKey } from "./security";
 import type { SimulationRun } from "./types";
 
@@ -33,6 +33,7 @@ export async function verifyTestnetConfiguration() {
   if (root.network_passphrase !== Networks.TESTNET || network.passphrase !== Networks.TESTNET) {
     throw new SimulationBlockedError("TESTNET_NETWORK_MISMATCH");
   }
+  await verifyRouteExecutorConfiguration();
 }
 
 export async function fundWallet(wallet: string) {
@@ -87,10 +88,26 @@ export function verifyTransactionIntent(transaction: Transaction, kind: Pending[
     matchesUsdc(op.destAsset) && decimalToUnits(op.destAmount, 7) === decimalToUnits(run.amount, 7) &&
     decimalToUnits(op.sendMax, 7) > 0n && decimalToUnits(op.sendMax, 7) <= 9990n * 10000000n;
   if (kind === "proof") valid = op.type === "payment" && op.asset.isNative() && op.destination === PROOF_PAYMENT_DESTINATION && decimalToUnits(op.amount, 7) === 1000000n;
-  if ((kind === "route" || kind === "receipt") && op.type === "invokeHostFunction" && op.func.switch().name === "hostFunctionTypeInvokeContract") {
+  if ((kind === "execution" || kind === "route" || kind === "receipt") && op.type === "invokeHostFunction" && op.func.switch().name === "hostFunctionTypeInvokeContract") {
     const call = op.func.invokeContract();
-    valid = Address.fromScAddress(call.contractAddress()).toString() === (kind === "route" ? ROUTE_REGISTRY_CONTRACT_ID : SETTLEMENT_RECEIPT_CONTRACT_ID) &&
-      call.functionName().toString() === (kind === "route" ? "create_route" : "record_outcome");
+    const expectedContract = kind === "execution" ? ROUTE_EXECUTOR_CONTRACT_ID : kind === "route" ? ROUTE_REGISTRY_CONTRACT_ID : SETTLEMENT_RECEIPT_CONTRACT_ID;
+    const expectedMethod = kind === "execution" ? "execute_route" : kind === "route" ? "create_route" : "record_outcome";
+    valid = Address.fromScAddress(call.contractAddress()).toString() === expectedContract &&
+      call.functionName().toString() === expectedMethod;
+    if (valid && kind === "execution") {
+      if (!run.quote) throw new SimulationBlockedError("QUOTE_MISSING");
+      const args = call.args().map((arg) => scValToNative(arg));
+      valid =
+        Buffer.from(args[0]).toString("hex") === run.routeId &&
+        Buffer.from(args[1]).toString("hex") === run.receiptId &&
+        args[2] === run.wallet &&
+        args[3] === run.quote.anchorId &&
+        args[4] === run.quote.sourceAsset &&
+        args[5] === decimalToUnits(run.quote.sourceAmount, 7) &&
+        args[6] === run.quote.destinationCurrency &&
+        args[7] === decimalToUnits(run.quote.destinationAmount, 2) &&
+        args[8] === decimalToUnits(run.quote.fee ?? "0", 7);
+    }
   }
   if (!valid) throw new SimulationBlockedError("TRANSACTION_INTENT_MISMATCH");
 }
@@ -98,13 +115,18 @@ export function verifyTransactionIntent(transaction: Transaction, kind: Pending[
 export async function prepareTransaction(kind: Pending["kind"], run: SimulationRun): Promise<Pending> {
   const key = keyForRun(run);
   let transaction: Transaction;
-  if (kind === "route" || kind === "receipt") {
+  if (kind === "execution" || kind === "route" || kind === "receipt") {
     if (!run.quote) throw new SimulationBlockedError("QUOTE_MISSING");
-    const assembled = kind === "route"
-      ? await prepareRouteTransaction({ address: run.wallet, routeId: Buffer.from(run.routeId, "hex"), quote: run.quote })
-      : await prepareSettlementTransaction({ address: run.wallet, routeId: Buffer.from(run.routeId, "hex"),
-        receiptId: Buffer.from(run.receiptId, "hex"), paymentHash: run.hashes.proof!, succeeded: true });
-    if (kind === "route" && !isSelectableQuote(run.quote, new Date())) throw new Error("QUOTE_EXPIRED_BEFORE_SIGNING");
+    const assembled = kind === "execution"
+      ? await prepareRouteExecutionTransaction({ address: run.wallet, routeId: Buffer.from(run.routeId, "hex"),
+        receiptId: Buffer.from(run.receiptId, "hex"), quote: run.quote })
+      : kind === "route"
+        ? await prepareRouteTransaction({ address: run.wallet, routeId: Buffer.from(run.routeId, "hex"), quote: run.quote })
+        : await prepareSettlementTransaction({ address: run.wallet, routeId: Buffer.from(run.routeId, "hex"),
+          receiptId: Buffer.from(run.receiptId, "hex"), paymentHash: run.hashes.proof!, succeeded: true });
+    if ((kind === "route" || kind === "execution") && !isSelectableQuote(run.quote, new Date())) {
+      throw new Error("QUOTE_EXPIRED_BEFORE_SIGNING");
+    }
     await assembled.sign({ signTransaction: key });
     if (!assembled.signed || !(assembled.signed instanceof Transaction)) throw new Error("SIGNING_FAILED");
     transaction = assembled.signed;
@@ -171,7 +193,8 @@ export async function verifyRoute(run: SimulationRun, completed = false) {
     const receipt = await getRouteReceipt(Buffer.from(run.routeId, "hex"));
     if (!receipt || receipt.user !== run.wallet || receipt.route_id.toString("hex") !== run.routeId ||
         receipt.receipt_id.toString("hex") !== run.receiptId || receipt.status.tag !== "Completed" ||
-        receipt.transaction_hash.toString("hex") !== run.hashes.proof || route.transaction_hash?.toString("hex") !== run.hashes.proof) {
+        receipt.transaction_hash.toString("hex") !== (run.hashes.execution ? "0".repeat(64) : run.hashes.proof) ||
+        route.transaction_hash?.toString("hex") !== (run.hashes.execution ? "0".repeat(64) : run.hashes.proof)) {
       throw new SimulationBlockedError("RECEIPT_VERIFICATION_FAILED");
     }
   }

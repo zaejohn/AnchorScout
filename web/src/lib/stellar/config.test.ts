@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   hasValidContractDeployment,
-  stellarHorizonTransactionUrl,
+  stellarExpertUrl,
 } from "./config";
 
 const ROUTE = "CBYCCXCJLFQKUIPNJDQNXXIGV26S4FSXGHRYQQBPU3EYUGE6EXRRDZ5H";
@@ -24,10 +24,10 @@ describe("public Testnet configuration", () => {
     ).toBe(false);
   });
 
-  it("builds transaction evidence links against canonical Testnet Horizon", () => {
+  it("builds transaction evidence links against Stellar Expert Testnet", () => {
     const hash = "ab".repeat(32);
-    expect(stellarHorizonTransactionUrl(hash)).toBe(
-      `https://horizon-testnet.stellar.org/transactions/${hash}`,
+    expect(stellarExpertUrl("tx", hash)).toBe(
+      `https://stellar.expert/explorer/testnet/tx/${hash}`,
     );
   });
 });

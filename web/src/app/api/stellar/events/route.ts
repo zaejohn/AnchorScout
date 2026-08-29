@@ -1,5 +1,6 @@
 import { noStoreJson } from "@/lib/server/responses";
 import {
+  ROUTE_EXECUTOR_CONTRACT_ID,
   ROUTE_REGISTRY_CONTRACT_ID,
   SETTLEMENT_RECEIPT_CONTRACT_ID,
   STELLAR_RPC_URL,
@@ -44,9 +45,10 @@ export async function GET(request: Request) {
         requestedStartLedger: requested,
         latestLedger: latest.sequence,
         contractIds: [
+          ROUTE_EXECUTOR_CONTRACT_ID,
           ROUTE_REGISTRY_CONTRACT_ID,
           SETTLEMENT_RECEIPT_CONTRACT_ID,
-        ],
+        ].filter(Boolean),
       }),
     );
     return noStoreJson({

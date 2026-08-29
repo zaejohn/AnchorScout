@@ -6,7 +6,7 @@ export const SIMULATION_STATES = [
 ] as const;
 
 export type SimulationState = (typeof SIMULATION_STATES)[number];
-export type TransactionKind = "trustline" | "swap" | "route" | "proof" | "receipt";
+export type TransactionKind = "trustline" | "swap" | "execution" | "route" | "proof" | "receipt";
 export type SimulationFormStatus = "NOT_SENT" | "SENDING" | "CONFIRMED" | "UNKNOWN";
 
 export interface SimulationRun {

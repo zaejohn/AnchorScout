@@ -3,8 +3,9 @@ import {
   STELLAR_HORIZON_URL,
   STELLAR_NETWORK,
   STELLAR_RPC_URL,
-  hasContractDeployment,
+  hasExecutableDeployment,
 } from "@/lib/stellar/config";
+import { verifyRouteExecutorConfiguration } from "@/lib/stellar/contracts";
 
 async function probeHorizon() {
   const startedAt = performance.now();
@@ -40,16 +41,26 @@ async function probeRpc() {
 }
 
 export async function GET() {
-  const [horizon, rpc] = await Promise.allSettled([probeHorizon(), probeRpc()]);
-  const contractsConfigured = hasContractDeployment();
+  const contractsConfigured = hasExecutableDeployment();
+  const [horizon, rpc, executor] = await Promise.allSettled([
+    probeHorizon(),
+    probeRpc(),
+    contractsConfigured
+      ? verifyRouteExecutorConfiguration()
+      : Promise.reject(new Error("Executor not configured")),
+  ]);
   const ready =
-    contractsConfigured && horizon.status === "fulfilled" && rpc.status === "fulfilled";
+    contractsConfigured &&
+    horizon.status === "fulfilled" &&
+    rpc.status === "fulfilled" &&
+    executor.status === "fulfilled";
 
   return noStoreJson(
     {
       status: ready ? "ready" : "degraded",
       network: STELLAR_NETWORK,
       contractsConfigured,
+      executorConfigured: executor.status === "fulfilled",
       horizon:
         horizon.status === "fulfilled" ? horizon.value : { ok: false },
       rpc: rpc.status === "fulfilled" ? rpc.value : { ok: false },

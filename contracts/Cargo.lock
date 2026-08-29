@@ -1317,6 +1317,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "route-executor"
+version = "0.1.0"
+dependencies = [
+ "route-registry",
+ "settlement-receipt",
+ "soroban-sdk",
+]
+
+[[package]]
 name = "route-registry"
 version = "0.1.0"
 dependencies = [

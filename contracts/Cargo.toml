@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["route-registry", "settlement-receipt"]
+members = ["route-registry", "settlement-receipt", "route-executor"]
 
 [workspace.dependencies]
 soroban-sdk = "27.0.0"
@@ -14,4 +14,3 @@ debug-assertions = false
 panic = "abort"
 codegen-units = 1
 lto = true
-

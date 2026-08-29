@@ -20,7 +20,7 @@ export type TransactionUpdate = {
 
 export class SubmittedTransactionPendingError extends Error {
   constructor(
-    readonly stage: "route" | "payment" | "receipt",
+    readonly stage: "route" | "payment" | "receipt" | "execution",
     readonly hash: string,
     readonly routeId?: string,
   ) {

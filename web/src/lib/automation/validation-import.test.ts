@@ -109,4 +109,20 @@ describe("private validation reservation migration", () => {
     await expect(importValidationSnapshot(database, { ...input, runs: [...input.runs, ...input.runs] })).rejects.toThrow("INVALID_VALIDATION_EXPORT");
     await expect(importValidationSnapshot(database, { ...input, nextRunAt: input.lastRunAt })).rejects.toThrow("INVALID_VALIDATION_SCHEDULE");
   });
+
+  it("round-trips atomic execution hashes and failed execution checkpoints", async () => {
+    const input = snapshot();
+    input.runs[0].hashes.execution = "e".repeat(64);
+    input.runs[0].failedTransactions = [
+      { kind: "execution", hash: "f".repeat(64), outcome: "failed" },
+    ];
+    await importValidationSnapshot(database, input, undefined);
+    const exported = await exportValidationSnapshot(database);
+    expect(exported.runs[0].hashes.execution).toBe("e".repeat(64));
+    expect(exported.runs[0].failedTransactions).toEqual(input.runs[0].failedTransactions);
+    await expect(importValidationSnapshot(database, exported, undefined)).resolves.toEqual({
+      imported: 0,
+      preserved: 1,
+    });
+  });
 });

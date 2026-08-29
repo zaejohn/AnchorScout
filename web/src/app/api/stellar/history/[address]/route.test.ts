@@ -60,6 +60,7 @@ describe("wallet history transaction evidence", () => {
         [
           ROUTE_ID,
           {
+            executionTransactionHash: "3".repeat(64),
             routeTransactionHash: "1".repeat(64),
             receiptTransactionHash: "2".repeat(64),
           },
@@ -68,7 +69,7 @@ describe("wallet history transaction evidence", () => {
     );
   });
 
-  it("returns only the matching Horizon-confirmed payment hash on Testnet", async () => {
+  it("returns one canonical atomic transaction hash on Testnet", async () => {
     mocks.findConfirmedXlmTransaction.mockResolvedValue({
       status: "successful",
       transaction: { hash: HASH, ledger: 123, successful: true },
@@ -79,14 +80,13 @@ describe("wallet history transaction evidence", () => {
     expect(response.status).toBe(200);
     expect(payload.routes[0]).toMatchObject({
       network: "TESTNET",
-      paymentHash: HASH,
-      paymentStatus: "SUCCESS",
-      routeTransactionHash: "1".repeat(64),
-      receiptTransactionHash: "2".repeat(64),
+      transactionHash: "3".repeat(64),
+      transactionStatus: "SUCCESS",
+      transactionKind: "ATOMIC_PROOF",
     });
   });
 
-  it("does not expose a payment hash Horizon cannot find", async () => {
+  it("keeps atomic event evidence when a legacy payment is not found", async () => {
     mocks.findConfirmedXlmTransaction.mockResolvedValue({ status: "not_found" });
 
     const { response, payload } = await requestHistory();
@@ -94,12 +94,12 @@ describe("wallet history transaction evidence", () => {
     expect(response.status).toBe(200);
     expect(payload.routes[0]).toMatchObject({
       network: "TESTNET",
-      paymentHash: null,
-      paymentStatus: "NOT_FOUND",
+      transactionHash: "3".repeat(64),
+      transactionStatus: "SUCCESS",
     });
   });
 
-  it("keeps durable History available during a transient Horizon failure", async () => {
+  it("keeps durable History available during a transient legacy lookup failure", async () => {
     mocks.findConfirmedXlmTransaction.mockRejectedValue(new Error("Horizon timeout"));
 
     const { response, payload } = await requestHistory();
@@ -107,8 +107,8 @@ describe("wallet history transaction evidence", () => {
     expect(response.status).toBe(200);
     expect(payload.routes[0]).toMatchObject({
       network: "TESTNET",
-      paymentHash: null,
-      paymentStatus: "UNAVAILABLE",
+      transactionHash: "3".repeat(64),
+      transactionStatus: "SUCCESS",
     });
   });
 });

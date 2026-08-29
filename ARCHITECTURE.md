@@ -2,20 +2,19 @@
 
 ## System shape
 
-AnchorScout is a hybrid Next.js dApp. Next.js 16 App Router provides the public UI and server-side Anchor aggregation. User-controlled wallets sign every payment and contract transaction. Two protocol-27 Stellar contracts own route and settlement state on Testnet.
+AnchorScout is a hybrid Next.js dApp. Next.js 16 App Router provides the public UI and server-side Anchor aggregation. A user-controlled wallet approves one atomic Route Executor transaction; three protocol-27 Stellar contracts coordinate route state, the native-XLM proof, and receipt state on Testnet.
 
 The interactive MVP remains wallet-controlled and stateless off-chain. The opt-in Testnet simulation adds Postgres persistence for profiles, run checkpoints, scheduling and leases; it does not add production fiat execution or custody of real-user wallets.
 
 ```text
 Browser wallet + interactive UI
-  |-- classic XLM payment ----------------------> Horizon / Testnet
-  |-- signed contract transactions ------------> Stellar RPC / Testnet
+  |-- one signed executor transaction ----------> Stellar RPC / Testnet
+  |-- optional Send XLM utility ----------------> Horizon / Testnet
   `-- validated route request -----------------> Next.js Route Handler
                                                    `-> parallel Anchor adapters
 
-Settlement Receipt contract --finalize_route--> Route Registry contract
-          |                                            |
-          `------------- contract events --------------'
+Route Executor --> Route Registry + native XLM SAC + Settlement Receipt
+                                               `-------> Route Registry finalization
                               |
                      polling + durable reads
                               |
@@ -59,7 +58,14 @@ Every normalized quote carries `quoteKind`, `settlementMode`, rate/fee/availabil
 - Constructor stores the Route Registry address.
 - `record_outcome` requires the route user's authorization, verifies the route owner with the registry, prevents duplicate settlement, stores a durable receipt, and calls `RouteRegistry.finalize_route` in the same atomic transaction.
 - The nested call is the required inter-contract communication. Any failure rolls back both contracts.
-- The referenced classic transaction hash is user-attested. The application confirms it through Horizon before requesting the receipt signature, but the contract cannot inspect historical classic transactions. The receipt proves the user's attestation and atomic two-contract finalization, not independent payment verification.
+- Its legacy hash field stores zero for executor-driven records because a contract cannot know its outer transaction hash while running. RPC `route_executed` evidence supplies the canonical outer hash.
+
+### Route Executor
+
+- Constructor immutably stores the configured registry, settlement contract, native XLM SAC, and proof destination.
+- `execute_route` requires the route user's authorization, creates the route, transfers exactly 0.1 XLM, records the receipt, and finalizes the route in one Soroban invocation tree.
+- Any nested failure rolls back route state, receipt state, and the token transfer. Clients verify the full on-chain configuration before preparing or automating a transaction.
+- The stored source amount and external PHP route are comparison evidence only. The atomic transfer proves the separate 0.1 XLM Testnet action; it does not execute the quoted provider payout.
 
 ## State invariants
 
@@ -70,16 +76,16 @@ Every normalized quote carries `quoteKind`, `settlementMode`, rate/fee/availabil
 5. A receipt's user must equal the stored route owner.
 6. Source and destination amounts are positive; fees are non-negative; stored text is non-empty and bounded.
 7. Quote selection requires an unexpired `AVAILABLE` quote. A "Best" label additionally requires complete fee and numeric timing data. The committed quote hash binds the payout method as well as provider, amounts, fee, quote ID, and expiry.
-8. Submitted transactions are not shown as confirmed until Horizon or RPC confirms them.
-9. A receipt's classic transaction hash is a wallet-authorized reference; clients must verify it with Horizon before presenting payment confirmation.
+8. Submitted transactions are not shown as confirmed until RPC confirms them.
+9. Only a successful `route_executed` event is presented as atomic proof; older payment/receipt records are explicitly legacy evidence.
 
 ## Transaction lifecycle
 
-Classic payments use `preparing -> awaiting_signature -> submitted -> confirmed|failed|rejected` through Horizon. Contract calls add simulation before signing and use RPC polling until a terminal ledger result. Wrong network, wallet absence, rejection, insufficient balance, simulation errors, submission errors, and confirmation timeout are recoverable UI states.
+The route proof uses `simulating -> awaiting_signature -> submitted -> confirmed|failed|rejected` through RPC with exactly one wallet approval. The optional Send XLM utility remains a classic Horizon payment. Wrong network, wallet absence, rejection, insufficient balance, simulation errors, submission errors, and confirmation timeout are recoverable UI states.
 
 ## Event and history synchronization
 
-The application polls RPC `getEvents` for both deployed contract IDs, overlaps the last scanned ledger, and deduplicates by event ID. Events trigger a durable contract-history refresh. Event retention is not treated as permanent storage: wallet history is rebuilt from the Route Registry's paginated user index and receipt reads. Before History exposes a stored classic payment hash, the server resolves the exact hash through Testnet Horizon and uses Horizon's canonical response. Route and receipt invocation hashes are accepted only from successful, correctly encoded Testnet RPC events.
+The application polls RPC `getEvents` for all deployed contract IDs, overlaps the last scanned ledger, and deduplicates by event ID. Events trigger a durable contract-history refresh. Event retention is not treated as permanent storage: wallet history is rebuilt from the Route Registry's paginated user index and receipt reads. New records use the successful executor event's outer hash; History renders exactly one Stellar Expert Testnet link. Older three-transaction records retain one labeled legacy link.
 
 ## Environment and trust boundaries
 
