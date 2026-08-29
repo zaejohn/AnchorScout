@@ -1,188 +1,116 @@
-# AnchorScout
+# AnchorScout — Level 1–5 Verification
 
-[![AnchorScout CI](https://github.com/zaejohn/AnchorScout/actions/workflows/ci.yml/badge.svg)](https://github.com/zaejohn/AnchorScout/actions/workflows/ci.yml)
+AnchorScout compares live Stellar payment-route data before a user signs. It shows provider, rate, fee, payout type, time, and availability in one flow.
 
-AnchorScout is a non-custodial Stellar Testnet route-comparison dApp. It compares normalized external provider data, distinguishes firm quotes from market references, records a selected route on Soroban, and completes a separate real XLM proof flow with public receipt evidence.
+> **Scope:** Stellar Testnet. AnchorScout records an on-chain route proof and sends a 0.1 XLM proof payment. It does **not** send the quoted PHP payout. Unsupported fiat steps are clearly simulated.
 
-The product solves a simple problem: payment routes expose different rates, fees, speed, and availability, but those differences are hard to compare consistently. AnchorScout isolates each provider behind one adapter interface, validates and normalizes responses server-side, and never invents a missing fee, settlement time, or provider capability. Incomplete routes remain visible and attributed but cannot receive a "Best" badge.
+[Live app](https://anchorscout.vercel.app/app) · [Public GitHub](https://github.com/zaejohn/AnchorScout) · [Demo video](https://drive.google.com/file/d/1OyA98uTZ0VAnub3cu1voecrTvb2NwfNb/view?usp=sharing) · [Pitch deck](https://docs.google.com/presentation/d/1LDgXMJheC_ddSYXd-xuqscZ-rdoLyhER/edit?usp=sharing&ouid=101415220365621969880&rtpof=true&sd=true) · [User response sheet](https://docs.google.com/spreadsheets/d/11oEpTGkshRKcEfe2DZspYGqoi27uqUCLUvwlB54x1EI/edit?usp=sharing)
 
-## Evidence at a glance
+Evidence checked: **2026-08-29**.
 
-![Desktop route comparison](docs/evidence/desktop-route-comparison.png)
+## Verification status
 
-| Wallet selection | Mobile route comparison |
+| Level | Status | Main result |
+| --- | --- | --- |
+| Level 1 | ✅ Verified | Wallet, XLM balance, Testnet XLM payment, and UI result |
+| Level 2 | ✅ Verified | Multi-wallet UI, errors, deployed contracts, contract call, status, and events |
+| Level 3 | ✅ Verified | Cross-contract flow, tests, CI/CD, responsive UI, architecture, and demo |
+| Level 4 | ⚠️ Partial | MVP, deployment, analytics, and UX are proved; 10 real users are not proved |
+| Level 5 | ⚠️ Partial | Deck, demo, iteration commits, and 70 form rows exist; 50 real users and their active usage are not proved |
+
+## Level 1 — White Belt
+
+| Requirement | Proof |
 | --- | --- |
-| ![Stellar Wallets Kit options](docs/evidence/wallet-options.png) | ![390 pixel mobile layout](docs/evidence/mobile-route-comparison.png) |
+| Freighter and Stellar Testnet | [Wallet options screenshot](<docs/evidence/wallet options available.png>) and [wallet integration](web/src/lib/stellar/wallet.ts) |
+| Connect and disconnect | [Connected wallet screenshot](<docs/evidence/Wallet-connected-state&Balance-displayed.png>) and [app UI](web/src/components/anchor-scout-app.tsx) |
+| Fetch and show XLM balance | [Connected wallet and balance screenshot](<docs/evidence/Wallet-connected-state&Balance-displayed.png>) and [account code](web/src/lib/stellar/classic.ts) |
+| Send XLM on Testnet | [Successful 0.1 XLM payment](https://stellar.expert/explorer/testnet/tx/707e08de52ba122c2d9ae992bf3a9c0d03b58f7d39ebd194f993ef3fe091b164) |
+| Success/failure and confirmation | [Result screenshot](<docs/evidence/transaction result is shown to the user.png>) and [error mapping](web/src/lib/stellar/errors.ts) |
+| Public repo and commit history | [38 commits on `main`](https://github.com/zaejohn/AnchorScout/commits/main/) |
 
-The screenshots are from the locally running production-shaped application. Public Testnet transactions below provide the authoritative route/payment/receipt evidence. A connected extension wallet screenshot remains a physical-browser step because the available verification browser has no Stellar wallet installed.
+## Level 2 — Yellow Belt
 
-## How it works
+| Requirement | Proof |
+| --- | --- |
+| Multi-wallet support | [Freighter, xBull, and LOBSTR screenshot](<docs/evidence/wallet options available.png>) |
+| Three error types | [Wallet missing, user rejection, and insufficient balance handling](web/src/lib/stellar/errors.ts) |
+| Contracts deployed on Testnet | Route Registry [`CBYCCX…RDZ5H`](https://lab.stellar.org/r/testnet/contract/CBYCCXCJLFQKUIPNJDQNXXIGV26S4FSXGHRYQQBPU3EYUGE6EXRRDZ5H), Settlement Receipt [`CBQKAL…IBDJM`](https://lab.stellar.org/r/testnet/contract/CBQKALTRUEBNTDOKL7UOOSEFPJMHZRQCWV5C6VZA4T3TO4WEB2OIBDJM), Route Executor [`CAFKJQ…W2BIQH`](https://lab.stellar.org/r/testnet/contract/CAFKJQJGL4U3LAGEGXARMHGURTQUUCJYSRBKMZC7AI3JXMQHUZW2BIQH) |
+| Contract called by the frontend | [Frontend contract client](web/src/lib/stellar/contracts.ts) and [successful one-sign contract transaction](https://stellar.expert/explorer/testnet/tx/c6948d8c82c8413f05d61e6a7f6a11f88a81838ca4a7ec414a17e074ebc6551e) |
+| Pending, success, failure, rejection | [Transaction-state UI](web/src/components/anchor-scout-app.tsx) and [result screenshot](<docs/evidence/transaction result is shown to the user.png>) |
+| Event updates and state sync | [RPC event reader](web/src/lib/stellar/event-evidence.ts), [events API](web/src/app/api/stellar/events/route.ts), and [flow design](ARCHITECTURE.md) |
 
-1. Connect Freighter, xBull, or LOBSTR through Stellar Wallets Kit on Testnet.
-2. Load XLM and configured asset balances from Horizon.
-3. Submit a validated route request to the Next.js backend.
-4. Query Coins.ph live market data, MoneyGram Testnet capability, and any configured SEP-38 endpoint concurrently.
-5. Normalize provenance, missing fields, expiry, settlement mode, and deterministic ranking.
-6. Approve one Route Executor invocation with the user's wallet.
-7. In that one atomic transaction, record the route, transfer the 0.1 XLM Testnet proof through the native XLM SAC, and finalize the receipt.
-8. Poll contract events and reload durable contract-backed history with one canonical Stellar Expert link.
+## Level 3 — Orange Belt
 
-AnchorScout never holds funds, requests secret keys, accepts a production provider quote, or signs for users. The external PHP payout remains simulated on Testnet and is explicitly separate from the 0.1 XLM proof transfer. `route_executed` is the canonical atomic-proof event; older multi-transaction records remain labeled legacy.
+| Requirement | Proof |
+| --- | --- |
+| Advanced and inter-contract logic | [Route Executor](contracts/route-executor/src/lib.rs) calls Route Registry and Settlement Receipt in one atomic flow; [architecture](ARCHITECTURE.md) |
+| Events and live updates | Contract events are read through RPC and refresh durable history: [event code](web/src/lib/stellar/event-evidence.ts) |
+| CI/CD pipeline | [Passing GitHub Actions run](https://github.com/zaejohn/AnchorScout/actions/runs/33241073171) and [workflow](.github/workflows/ci.yml) |
+| Testnet deployment workflow | [PowerShell deploy script](scripts/deploy-testnet.ps1), [shell deploy script](scripts/deploy-testnet.sh), and [network proof](NETWORKS.md) |
+| Mobile responsive UI | [Mobile wizard screenshot](<docs/evidence/Mobile responsive UI 2.png>) and [mobile Send XLM modal](<docs/evidence/Mobile responsive UI 3.png>) |
+| Loading and error states | [Wizard state UI](web/src/components/anchor-scout-app.tsx) and [error handling](web/src/lib/stellar/errors.ts) |
+| Frontend and contract tests | [236 passing web tests screenshot](<docs/evidence/Test output with 3+ passing tests.png>) and [CI test commands](.github/workflows/ci.yml) |
+| Production architecture and docs | [Architecture](ARCHITECTURE.md), [decisions](DECISIONS.md), this README, and the [demo video](https://drive.google.com/file/d/1OyA98uTZ0VAnub3cu1voecrTvb2NwfNb/view?usp=sharing) |
 
-## Routes
+## Level 4 — Green Belt
 
-- `/` — public landing page explaining the route-comparison model, provider attribution, and Stellar proof layer.
-- `/app` — the complete AnchorScout workflow: connect a wallet, enter transfer details, compare providers, select a route, sign, and track the result.
+| Requirement | Proof |
+| --- | --- |
+| Functional deployed MVP | [Live application](https://anchorscout.vercel.app/app) and [`ready` Testnet health endpoint](https://anchorscout.vercel.app/api/health) |
+| Stable frontend and contract design | [Architecture](ARCHITECTURE.md), server-side provider boundaries, and atomic contract flow |
+| Mobile UI and user states | [Mobile wizard](<docs/evidence/Mobile responsive UI 2.png>) and [result evidence](<docs/evidence/transaction result is shown to the user.png>) |
+| Analytics | [Vercel Analytics screenshot](<docs/evidence/Vercel analytics screenshot.jpg>) and [Analytics integration](web/src/app/layout.tsx) |
+| Product UI and UX | Focused three-step wizard, wallet profile, Send XLM modal, History modal, and one-sign proof flow |
+| 15+ commits | [38 commits on `main`](https://github.com/zaejohn/AnchorScout/commits/main/) |
+| 10 real users and wallet interactions | **Not verified.** See “Manual proof still needed.” |
 
-The landing page is intentionally server-rendered and has no wallet state. Its route preview is labeled illustrative; the `/app` comparison cards are the source of live provider data and disclosures.
+## Level 5 — Blue Belt
 
-## Architecture
+| Requirement | Proof |
+| --- | --- |
+| 20+ commits and updated docs | [38 commits](https://github.com/zaejohn/AnchorScout/commits/main/) and this README |
+| Product improvements | [Live provider layer](https://github.com/zaejohn/AnchorScout/commit/91ebc9f0466579a51b1f9b28dbf38b4c883443ed), [cleaner wizard](https://github.com/zaejohn/AnchorScout/commit/931a30935fa8e801d72198cafd7d724978db373f), and [one-sign route proof](https://github.com/zaejohn/AnchorScout/commit/918053a5e10ae84a537f3483a98899c8ee825e4d) |
+| Pitch deck | [10-slide pitch deck](https://docs.google.com/presentation/d/1LDgXMJheC_ddSYXd-xuqscZ-rdoLyhER/edit?usp=sharing&ouid=101415220365621969880&rtpof=true&sd=true): problem, solution, market, architecture, growth, and roadmap |
+| Full demo | [Demo video](https://drive.google.com/file/d/1OyA98uTZ0VAnub3cu1voecrTvb2NwfNb/view?usp=sharing) |
+| Google Form export | [Public sheet](https://docs.google.com/spreadsheets/d/11oEpTGkshRKcEfe2DZspYGqoi27uqUCLUvwlB54x1EI/edit?usp=sharing): 70 rows, 70 wallet-formatted values, 70 ratings, and 58 feedback entries |
+| 50 real users, real activity, and active-use proof | **Not verified.** Form rows and site visitors do not prove 50 real people or 50 app transactions. |
+| Feedback-based iteration | **Not verified as real-user feedback.** The current sheet can guide the next phase, but human origin must be proved first. |
 
-```text
-Browser wallet + responsive client
-        │
-        ├── Next.js Route Handlers ── provider registry ── Coins.ph / MoneyGram / SEP-38
-        │                                  │
-        │                                  └── normalization + deterministic ranking
-        │
-        ├── Horizon ── balances and classic Send XLM utility
-        │
-        └── Stellar RPC ── simulation, wallet signing, contract submission, events
-                                  │
-                    Route Executor contract
-                      │      │       │
-                      │      │       └── native XLM SAC transfer
-                      │      └── Settlement Receipt contract
-                      └── Route Registry contract
-```
+### Next-phase improvement plan
 
-- `web/src/lib/anchors/`: request schema, provider interface, adapters, normalization, ranking, and tests
-- `web/src/lib/stellar/`: Testnet config, Wallets Kit, retry-safe classic/contract lifecycles, generated-contract wrappers, and history synchronization
-- `web/src/app/api/`: quote, account, event, transaction-status, and history boundaries
-- `contracts/route-registry/`: wallet-owned route records and final-state transitions
-- `contracts/settlement-receipt/`: globally unique receipts and authenticated cross-contract finalization
-- `contracts/route-executor/`: one-approval orchestration and atomic native-XLM proof transfer
-- `web/src/lib/stellar/generated/`: generated TypeScript bindings from deployed contract specs
+| Current sheet theme | Next step | Existing base |
+| --- | --- | --- |
+| Easy and simple flow | Run five human usability sessions and measure completion, rejection, and retry points | [Wizard improvement commit](https://github.com/zaejohn/AnchorScout/commit/931a30935fa8e801d72198cafd7d724978db373f) |
+| Fee visibility | Show verified net receive, fee source, quote age, and provider availability for every eligible route | [Provider-layer commit](https://github.com/zaejohn/AnchorScout/commit/91ebc9f0466579a51b1f9b28dbf38b4c883443ed) |
+| Smooth transaction flow | Measure one-sign completion rate and improve recoverable failure messages | [One-sign commit](https://github.com/zaejohn/AnchorScout/commit/918053a5e10ae84a537f3483a98899c8ee825e4d) |
 
-See `ARCHITECTURE.md` for boundaries and invariants and `DECISIONS.md` for durable design choices.
+## Evidence screenshots
 
-## Setup
+| Wallet and balance | Successful Testnet transaction |
+| --- | --- |
+| ![Connected Testnet wallet with XLM balance](<docs/evidence/Wallet-connected-state&Balance-displayed.png>) | ![Successful transaction on Stellar Expert](<docs/evidence/Successful testnet transaction.png>) |
 
-### Requirements
+| CI/CD | Responsive UI | Analytics |
+| --- | --- | --- |
+| ![Passing GitHub Actions runs](<docs/evidence/CI-CD pipeline running.png>) | ![Mobile AnchorScout application wizard](<docs/evidence/Mobile responsive UI 2.png>) | ![Vercel Analytics](<docs/evidence/Vercel analytics screenshot.jpg>) |
 
-- Node.js 22+
-- pnpm 11+
-- Rust 1.96+ with `wasm32v1-none`
-- Stellar CLI 27+
-- Docker only if local Quickstart RPC testing is desired
+## Manual proof still needed
 
-### Install and run
+1. Onboard at least **50 unique real people**. Do not count cron or automated test profiles.
+2. Provide a privacy-safe table that maps each real user to one unique Testnet wallet and one AnchorScout transaction hash.
+3. Add screenshots or an explorer/dashboard view that proves active route transactions from those wallets. Friendbot funding alone is not enough.
+4. Collect real feedback from those people. Add a short `feedback → change → commit` table after a change is shipped.
+5. Show an external monitor checking `/api/health`, or add a monitoring service screenshot. The repo proves a health endpoint and analytics, but not an active alert.
 
-```powershell
-cd web
-Copy-Item .env.example .env.local
-pnpm install --frozen-lockfile
+## Run locally
+
+```bash
+git clone https://github.com/zaejohn/AnchorScout.git
+cd AnchorScout/web
+cp .env.example .env.local
+pnpm install
 pnpm dev
 ```
 
-Set these public Testnet values in `web/.env.local`:
-
-```dotenv
-NEXT_PUBLIC_STELLAR_HORIZON_URL=https://horizon-testnet.stellar.org
-NEXT_PUBLIC_STELLAR_RPC_URL=https://soroban-testnet.stellar.org
-NEXT_PUBLIC_ROUTE_REGISTRY_CONTRACT_ID=CBYCCXCJLFQKUIPNJDQNXXIGV26S4FSXGHRYQQBPU3EYUGE6EXRRDZ5H
-NEXT_PUBLIC_SETTLEMENT_RECEIPT_CONTRACT_ID=CBQKALTRUEBNTDOKL7UOOSEFPJMHZRQCWV5C6VZA4T3TO4WEB2OIBDJM
-NEXT_PUBLIC_ROUTE_EXECUTOR_CONTRACT_ID=CAFKJQJGL4U3LAGEGXARMHGURTQUUCJYSRBKMZC7AI3JXMQHUZW2BIQH
-NEXT_PUBLIC_PROOF_PAYMENT_DESTINATION=GDW2INHQPIWK6JYMVDPCT3JZHMBSYPDEWB56PCRC2JSXADAF22VF253M
-```
-
-No provider credential is required for live Coins.ph `XLMPHP`/`USDCPHP` market-reference results or MoneyGram Testnet capability checks. The public market adapter values the requested amount against the bid-side order book, so visible-depth slippage is included.
-
-The authenticated Coins.ph adapter requests a firm Convert quote and live `support-channel` fee, status, limits, and eligible rail. Anonymous `/api/quotes` requests always stay on the public market adapter. A trusted server caller may send `Authorization: Bearer <COINS_PH_QUOTE_ACCESS_TOKEN>`; only then, with `COINS_PH_FIRM_QUOTES_ENABLED=true` and both Coins.ph credentials, does the registry prefer the authenticated quote and safely fall back to the public market if it is unavailable. `DATABASE_URL` provides the durable per-minute abuse limit configured by `COINS_PH_QUOTE_RATE_LIMIT_PER_MINUTE`. Bank requests additionally require `COINS_PH_BANK_SUBJECT`. The adapter never accepts the quote or calls cash-out, and its bearer token must never be shipped to browser code.
-
-Run `pnpm simulation:setup` after deploying this change so the existing database also receives the idempotent `anchorscout_provider_quote_limits` table used by that access boundary.
-
-Onramper is registered only when `ONRAMPER_API_KEY` and at least one provider-issued `ONRAMPER_XLM_TESTNET_ASSET_ID` or `ONRAMPER_USDC_TESTNET_ASSET_ID` explicitly identify Stellar Testnet. For every request it calls the current `/supported/assets` sell endpoint, verifies the exact configured asset and PHP destination, discovers the requested bank/GCash payment method, and then calls the live quote endpoint. Only successful quote entries become route cards; error, blocked, generic/Mainnet-USDC, unsupported-payment, and empty responses remain unavailable. Use `ONRAMPER_ENVIRONMENT=staging` or `production` with the matching key and asset IDs supplied for that environment. Onramper's sandbox does not itself prove Testnet transaction support, so do not invent an ID.
-
-Optional `SEP38_ANCHOR_HOME_DOMAIN` and `SEP38_ANCHOR_NAME` enable a real indicative SEP-38 provider. The adapter discovers `ANCHOR_QUOTE_SERVER` through SEP-1, requires HTTPS, and only calls the home origin or origins explicitly listed in `SEP38_ALLOWED_QUOTE_ORIGINS`.
-
-## Provider and test-environment status
-
-| Provider | Data used now | Test environment | AnchorScout behavior |
-| --- | --- | --- | --- |
-| Coins.ph | Live public market status and bid depth, or trusted account-scoped firm quote and payout-channel data | No public end-to-end Stellar/fiat sandbox documented | Anonymous traffic remains public-market-only; firm access is bearer-protected and durably rate-limited; conversion and fiat execution are never initiated |
-| MoneyGram Ramps | Live Testnet SEP-1 and SEP-24 USDC cash-pickup capability/limits | Yes: Stellar Testnet anchor | Appears only for Test USDC + Cash pickup; PHP reference remains separately attributed to Coins.ph |
-| Configured SEP-38 anchor | Live SEP-1 discovery and `/price` response | Provider-specific | Indicative, comparison-only unless the provider supplies a compatible endpoint |
-| Onramper | Credentialed dynamic asset/payment/quote discovery | Staging exists, but it is not proof of Stellar Testnet transaction support | Registers only with an explicit provider-issued Stellar Testnet asset ID and emits only real successful quotes for that exact corridor |
-| TransFi | Not enabled | Credentialed sandbox exists | Excluded because the public matrix lists Stellar XLM/USDC as payout-only, not direct off-ramp deposits |
-
-Primary sources: [Coins.ph REST API](https://docs.coins.ph/rest-api/), [Coins.ph Business](https://www.coins.ph/en-ph/business), [MoneyGram Stellar integration](https://xramps.moneygram.com/ops/dev/stellar), [Onramper sell quotes](https://docs.onramper.com/reference/get_quotes-crypto-fiat), and [TransFi exchange rates](https://docs.transfi.com/reference/get-exchange-rates).
-
-### Verification
-
-```powershell
-cd web
-pnpm lint
-pnpm typecheck
-pnpm test
-pnpm build
-
-cd ..\contracts
-cargo test --workspace --locked
-stellar contract build --optimize
-```
-
-Verified release result:
-
-- ESLint: passed
-- TypeScript: passed
-- Frontend/domain tests: 236 passed across 25 files
-- Next.js 16.3.2 production build: passed
-- Soroban tests: 22 passed
-- Optimized contract builds: passed
-- Contract specialist re-review: no release-blocking findings
-- Desktop and 390 px mobile browser checks: passed
-
-The same gates are encoded in `.github/workflows/ci.yml`. [GitHub Actions run #4](https://github.com/zaejohn/AnchorScout/actions/runs/32699582208) passed both the web and contract jobs on the pushed implementation.
-
-### Deploy contracts to Testnet
-
-```powershell
-powershell -ExecutionPolicy Bypass -File scripts\deploy-testnet.ps1
-```
-
-The script retests and rebuilds exact optimized artifacts, creates/funds a secure-store deployer identity, deploys all three contracts, configures the one-shot settlement authority, smoke-reads state, and regenerates TypeScript bindings. No secret is written to the repository.
-
-## Stellar Testnet
-
-| Item | Public identifier |
-| --- | --- |
-| Route Registry | [`CBYCCX…RDZ5H`](https://lab.stellar.org/r/testnet/contract/CBYCCXCJLFQKUIPNJDQNXXIGV26S4FSXGHRYQQBPU3EYUGE6EXRRDZ5H) |
-| Settlement Receipt | [`CBQKALT…IBDJM`](https://lab.stellar.org/r/testnet/contract/CBQKALTRUEBNTDOKL7UOOSEFPJMHZRQCWV5C6VZA4T3TO4WEB2OIBDJM) |
-| Route Executor | [`CAFKJQJ…W2BIQH`](https://lab.stellar.org/r/testnet/contract/CAFKJQJGL4U3LAGEGXARMHGURTQUUCJYSRBKMZC7AI3JXMQHUZW2BIQH) |
-| One-sign route proof | [`c6948d8c…6551e`](https://stellar.expert/explorer/testnet/tx/c6948d8c82c8413f05d61e6a7f6a11f88a81838ca4a7ec414a17e074ebc6551e) |
-
-The final public reads return a `Completed` route and receipt, while the executor's `route_executed` event and native SAC transfer share the one outer transaction hash. `NETWORKS.md` contains complete artifact hashes, deployment transactions, IDs, asset scope, and reset guidance.
-
-## Operational status
-
-- Mainnet is disabled and was not touched.
-- Native XLM is the separate 0.1 XLM proof asset for XLM and Test USDC comparisons; it does not execute a quoted USDC or fiat payout. The optional automated validator acquires real Circle Testnet USDC through live Stellar path payments before comparing routes.
-- Vercel Web Analytics is included in the root layout, with non-sensitive quote/route lifecycle events.
-- `/api/health` probes Horizon, RPC, protocol/ledger visibility, and public contract configuration for deployment monitoring.
-- Production Vercel deployment is ready but requires `vercel login` or a deployment token; this workstation is logged out.
-- The in-app browser verified wallet discovery, route comparison, expiration countdowns, mobile responsiveness, and no horizontal overflow. Signing with a real extension wallet remains a human-controlled browser action.
-
-## Security notes
-
-- The browser is untrusted; route input is validated again at the server boundary.
-- Wallet signatures remain user-controlled.
-- Submission and confirmation are separate states; broadcast hashes are checkpointed before confirmation and reconciled after reload without automatic resubmission.
-- Configured SEP-38 HTTPS origins are resolved, public-address validated, DNS-pinned per request, response-bounded, and forbidden from redirecting.
-- Contract settlement authority is configured exactly once.
-- Receipt IDs are globally unique, and a failed nested Registry invocation rolls back Receipt storage atomically.
-- No bank, KYC or real-user private key is stored or emitted. The opt-in validator stores supplied feedback profiles privately in Postgres and derives only its own Testnet wallets from a server-only master.
-
-## Automated Testnet user simulation
-
-See [SIMULATION.md](SIMULATION.md) for the durable 17-minute scheduler, database setup, required secrets, cron-job.org headers, real validation command, exact form fields, and safe recovery. The endpoint is `POST /api/cron/simulate`; no Vercel Cron is used. These are synthetic test runs, not independent human adoption metrics.
+Open `http://localhost:3000/app`, set Freighter to **Testnet**, and fund the wallet with Friendbot. Environment details are in [`web/.env.example`](web/.env.example). Mainnet is disabled.
