@@ -27,7 +27,7 @@ Evidence checked: **2026-08-29**.
 | Fetch and show XLM balance | [Connected wallet and balance screenshot](<docs/evidence/Wallet-connected-state&Balance-displayed.png>) and [account code](web/src/lib/stellar/classic.ts) |
 | Send XLM on Testnet | [Successful 0.1 XLM payment](https://stellar.expert/explorer/testnet/tx/707e08de52ba122c2d9ae992bf3a9c0d03b58f7d39ebd194f993ef3fe091b164) |
 | Success/failure and confirmation | [Result screenshot](<docs/evidence/transaction result is shown to the user.png>) and [error mapping](web/src/lib/stellar/errors.ts) |
-| Public repo and commit history | [38 commits on `main`](https://github.com/zaejohn/AnchorScout/commits/main/) |
+| Public repo and commit history | [38+ commits on `main`](https://github.com/zaejohn/AnchorScout/commits/main/) |
 
 ## Level 2 — Yellow Belt
 
@@ -62,14 +62,14 @@ Evidence checked: **2026-08-29**.
 | Mobile UI and user states | [Mobile wizard](<docs/evidence/Mobile responsive UI 2.png>) and [result evidence](<docs/evidence/transaction result is shown to the user.png>) |
 | Analytics | [Vercel Analytics screenshot](<docs/evidence/Vercel analytics screenshot.jpg>) and [Analytics integration](web/src/app/layout.tsx) |
 | Product UI and UX | Focused three-step wizard, wallet profile, Send XLM modal, History modal, and one-sign proof flow |
-| 15+ commits | [38 commits on `main`](https://github.com/zaejohn/AnchorScout/commits/main/) |
+| 15+ commits | [38+ commits on `main`](https://github.com/zaejohn/AnchorScout/commits/main/) |
 | 10 real users and wallet interactions | **Not verified.** See “Manual proof still needed.” |
 
 ## Level 5 — Blue Belt
 
 | Requirement | Proof |
 | --- | --- |
-| 20+ commits and updated docs | [38 commits](https://github.com/zaejohn/AnchorScout/commits/main/) and this README |
+| 20+ commits and updated docs | [38+ commits](https://github.com/zaejohn/AnchorScout/commits/main/) and this README |
 | Product improvements | [Live provider layer](https://github.com/zaejohn/AnchorScout/commit/91ebc9f0466579a51b1f9b28dbf38b4c883443ed), [cleaner wizard](https://github.com/zaejohn/AnchorScout/commit/931a30935fa8e801d72198cafd7d724978db373f), and [one-sign route proof](https://github.com/zaejohn/AnchorScout/commit/918053a5e10ae84a537f3483a98899c8ee825e4d) |
 | Pitch deck | [10-slide pitch deck](https://docs.google.com/presentation/d/1LDgXMJheC_ddSYXd-xuqscZ-rdoLyhER/edit?usp=sharing&ouid=101415220365621969880&rtpof=true&sd=true): problem, solution, market, architecture, growth, and roadmap |
 | Full demo | [Demo video](https://drive.google.com/file/d/1OyA98uTZ0VAnub3cu1voecrTvb2NwfNb/view?usp=sharing) |
