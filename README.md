@@ -109,13 +109,33 @@ The collected feedback repeats three clear themes. The related improvements are 
 
 ## Evidence screenshots
 
-| Wallet and balance                                                                                       | Successful Testnet transaction                                                                  |
-| -------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
-| ![Connected Testnet wallet with XLM balance](docs/evidence/Wallet-connected-state&Balance-displayed.png) | ![Successful transaction on Stellar Expert](<docs/evidence/Successful testnet transaction.png>) |
+### Wallet and balance
 
-| CI/CD                                                                      | Responsive UI                                                                        | Analytics                                                            |
-| -------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ | -------------------------------------------------------------------- |
-| ![Passing GitHub Actions runs](<docs/evidence/CI-CD pipeline running.png>) | ![Mobile AnchorScout application wizard](<docs/evidence/Mobile responsive UI 2.png>) | ![Vercel Analytics](<docs/evidence/Vercel analytics screenshot.jpg>) |
+| Wallet Kit options | Available wallet choices | Connected wallet and balances |
+| --- | --- | --- |
+| ![Stellar Wallets Kit options](docs/evidence/wallet-options.png) | ![Freighter, xBull, and LOBSTR wallet choices](<docs/evidence/wallet options available.png>) | ![Connected Testnet wallet with XLM and USDC balances](<docs/evidence/Wallet-connected-state&Balance-displayed.png>) |
+
+### Transaction result
+
+| In-app completion | Stellar Expert confirmation |
+| --- | --- |
+| ![AnchorScout transaction result and success toast](<docs/evidence/transaction result is shown to the user.png>) | ![Successful Testnet transaction on Stellar Expert](<docs/evidence/Successful testnet transaction.png>) |
+
+### Mobile responsive UI
+
+| Landing page | Transfer wizard | Send XLM modal |
+| --- | --- | --- |
+| ![Mobile landing page](<docs/evidence/Mobile responsive UI 1.png>) | ![Mobile transfer wizard](<docs/evidence/Mobile responsive UI 2.png>) | ![Mobile Send XLM modal](<docs/evidence/Mobile responsive UI 3.png>) |
+
+| Route history modal | Connected wallet profile |
+| --- | --- |
+| ![Mobile route history modal](<docs/evidence/Mobile responsive UI 4.png>) | ![Mobile connected wallet profile and balances](<docs/evidence/Mobile responsive UI 5.png>) |
+
+### Engineering and product evidence
+
+| CI/CD | Test output | Analytics |
+| --- | --- | --- |
+| ![Passing GitHub Actions workflow](<docs/evidence/CI-CD pipeline running.png>) | ![236 passing frontend tests](<docs/evidence/Test output with 3+ passing tests.png>) | ![Vercel Analytics dashboard](<docs/evidence/Vercel analytics screenshot.jpg>) |
 
 ## Run locally
 
