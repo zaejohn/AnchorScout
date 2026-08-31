@@ -87,6 +87,7 @@ export default function Home() {
         <nav className="landing-nav" aria-label="Main navigation">
           <a href="#how-it-works">How it works</a>
           <a href="#why-stellar">Why Stellar</a>
+          <Link href="/docs">Docs</Link>
         </nav>
         <Link className="button primary small landing-nav-cta" href="/app">
           Open app <span aria-hidden="true">↗</span>
@@ -184,6 +185,7 @@ export default function Home() {
       <footer className="landing-footer">
         <Link className="brand" href="/" aria-label="AnchorScout home"><span className="brand-mark"><Image className="brand-logo" src="/logo.png" alt="" width={42} height={42} /></span><span>AnchorScout</span></Link>
         <span>Built on Stellar for transparent route decisions.</span>
+        <Link href="/docs">Documentation</Link>
         <span>External fiat payout steps remain clearly marked when simulated.</span>
       </footer>
     </main>

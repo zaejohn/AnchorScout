@@ -4,7 +4,7 @@ AnchorScout compares live Stellar payment-route data before a user signs. It sho
 
 > **Scope:** Stellar Testnet. AnchorScout records an on-chain route proof and sends an XLM proof payment. It does **not** send the quoted PHP payout. Unsupported fiat steps are clearly simulated.
 
-[Live app](https://anchorscout.vercel.app/app) · [Public GitHub](https://github.com/zaejohn/AnchorScout) · [Demo video](https://drive.google.com/file/d/1OyA98uTZ0VAnub3cu1voecrTvb2NwfNb/view?usp=sharing) · [Pitch deck](https://docs.google.com/presentation/d/1LDgXMJheC_ddSYXd-xuqscZ-rdoLyhER/edit?usp=sharing&ouid=101415220365621969880&rtpof=true&sd=true) · [User response sheet](https://docs.google.com/spreadsheets/d/11oEpTGkshRKcEfe2DZspYGqoi27uqUCLUvwlB54x1EI/edit?usp=sharing)
+[Live app](https://anchorscout.vercel.app/app) · [Documentation](https://anchorscout.vercel.app/docs) · [Public GitHub](https://github.com/zaejohn/AnchorScout) · [Demo video](https://drive.google.com/file/d/1OyA98uTZ0VAnub3cu1voecrTvb2NwfNb/view?usp=sharing) · [Pitch deck](https://docs.google.com/presentation/d/1LDgXMJheC_ddSYXd-xuqscZ-rdoLyhER/edit?usp=sharing&ouid=101415220365621969880&rtpof=true&sd=true) · [User response sheet](https://docs.google.com/spreadsheets/d/11oEpTGkshRKcEfe2DZspYGqoi27uqUCLUvwlB54x1EI/edit?usp=sharing)
 
 ## Verification status
 
@@ -57,6 +57,7 @@ The script verifies distinct form identities, wallets, completed routes, transac
 | Contract called by the frontend      | [Frontend contract client](web/src/lib/stellar/contracts.ts) and [successful one-sign contract transaction](https://stellar.expert/explorer/testnet/tx/c6948d8c82c8413f05d61e6a7f6a11f88a81838ca4a7ec414a17e074ebc6551e)                                                                                                                                                                                              |
 | Pending, success, failure, rejection | [Transaction-state UI](web/src/components/anchor-scout-app.tsx) and [result screenshot](<docs/evidence/transaction result is shown to the user.png>)                                                                                                                                                                                                                                                                  |
 | Event updates and state sync         | [RPC event reader](web/src/lib/stellar/event-evidence.ts), [events API](web/src/app/api/stellar/events/route.ts), and [flow design](ARCHITECTURE.md)                                                                                                                                                                                                                                                                  |
+| Public project documentation         | [Documentation website](https://anchorscout.vercel.app/docs): features, usage, setup, implementation, providers, contracts, and verification                                                                                                                                                                                                                                                                          |
 
 ## Level 3 — Orange Belt
 

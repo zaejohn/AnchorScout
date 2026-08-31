@@ -24,6 +24,7 @@ Route Executor --> Route Registry + native XLM SAC + Settlement Receipt
 ## Application boundaries
 
 - The public `/` route is a server-rendered product landing page. It explains the comparison model and links into `/app` without importing wallet code or adding client state.
+- The public `/docs` route is a static Server Component that documents product features, usage, local setup, provider limits, implementation boundaries, Testnet contracts, and verification links.
 - The executable `/app` route renders the existing client-heavy AnchorScout workflow and keeps wallet, balance, forms, countdowns, signatures, transaction lifecycle, event polling, and user feedback together.
 - A focused Client Component owns wallet selection, balance refresh, forms, countdowns, signatures, transaction lifecycle, event polling, and user feedback.
 - `POST /api/quotes` validates untrusted input, runs providers concurrently with per-provider timeouts, normalizes responses, filters expired/malformed quotes, and ranks deterministically.

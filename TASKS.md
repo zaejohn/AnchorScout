@@ -32,6 +32,7 @@
 - [x] Verify History payment hashes against Testnet Horizon, validate RPC event hashes, and link transaction evidence to the canonical Testnet record instead of trusting unverified identifiers
 - [x] Replace the interactive and automated three-sign route proof with one atomic Route Executor approval, one canonical hash, and one Stellar Expert link; deploy and verify the full Testnet transaction
 - [x] Add a live Level 4–5 evidence verifier that joins Google Form identities to unique wallets, contract-backed AnchorScout history, and successful Horizon Testnet transactions; publish the verified JSON and judge-facing counts
+- [x] Publish a dedicated `/docs` website covering product features, usage, setup, implementation, providers, contracts, and verification evidence
 
 ## Human-controlled completion gates
 

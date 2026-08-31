@@ -11,6 +11,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL("https://anchorscout.vercel.app"),
   title: "AnchorScout — Compare Stellar routes",
   description:
     "Compare transparent Stellar payment routes, sign from your wallet, and verify settlement on-chain.",
