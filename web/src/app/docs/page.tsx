@@ -276,7 +276,7 @@ pnpm dev`}</code></pre>
               </div>
             </div>
             <div className="docs-link-grid">
-              <ExternalLink href="https://github.com/zaejohn/AnchorScout#level-2--yellow-belt"><strong>Level 2 proof</strong><span>Wallets, errors, contracts, status, and events</span></ExternalLink>
+              <ExternalLink href="https://github.com/zaejohn/AnchorScout"><strong>Project repository</strong><span>Source code, setup, evidence, screenshots, and project history</span></ExternalLink>
               <ExternalLink href="https://github.com/zaejohn/AnchorScout/actions"><strong>CI/CD</strong><span>Lint, typecheck, tests, builds, and contract checks</span></ExternalLink>
               <ExternalLink href="https://github.com/zaejohn/AnchorScout/blob/main/ARCHITECTURE.md"><strong>Architecture</strong><span>Trust boundaries, providers, state, and transaction flow</span></ExternalLink>
               <ExternalLink href="https://drive.google.com/file/d/1OyA98uTZ0VAnub3cu1voecrTvb2NwfNb/view?usp=sharing"><strong>Demo video</strong><span>Complete product walkthrough</span></ExternalLink>
